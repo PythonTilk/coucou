@@ -39,6 +39,8 @@ export interface ViewHost {
   focus?(): void;
   /** Called every frame while the view is on screen. */
   tick?(nowMs: number): void;
+  /** True while `tick` still has something to move: keeps the frame loop alive. */
+  animating?(): boolean;
 }
 
 // ── Shared pieces ─────────────────────────────────────────────────────────────
@@ -166,6 +168,9 @@ function buildOverview(actions: ViewActions): ViewHost {
     el,
     tick(nowMs: number) {
       if (mode === "ticker") ticker.tick(nowMs);
+    },
+    animating() {
+      return mode === "ticker" && ticker.animating;
     },
     sync() {
       const task = State.focusTask;

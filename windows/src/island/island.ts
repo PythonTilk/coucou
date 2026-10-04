@@ -757,7 +757,10 @@ export class Island {
       ? settling
       : settling ||
         !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
-        greetingActive || this.engine.busy || UploadSeq.isActive;
+        greetingActive || this.engine.busy || UploadSeq.isActive ||
+        // The ticker scrolls on this loop. Mochi at rest used to end the loop
+        // with a step half-way up, and the rows stayed there, overlapping.
+        (this.views.get(State.view)?.animating?.() ?? false);
 
     if (busy) {
       requestAnimationFrame(this.frame);
