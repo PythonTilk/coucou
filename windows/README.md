@@ -66,13 +66,28 @@ exits cleanly if the app is closed, slow or crashed — **a Claude Code session 
 never blocked or slowed down by Coucou.** If nobody answers a permission request
 in time, Coucou stays quiet and Claude Code asks in the terminal as usual.
 
-It works from any terminal — Windows Terminal, PowerShell, VS Code, Git Bash.
+It works from any terminal or editor — Windows Terminal, PowerShell, VS Code,
+Zed, Git Bash. **Open terminal** on the island brings forward the window the
+session is running in, whichever it is. If that window is gone, the working
+folder opens in VS Code or Zed instead.
 
 ## Chat and keys
 
-**Settings… → Claude** takes your Anthropic API key. Keys live in the **Windows
-Credential Manager**, never on disk and never in the interface — the island can
-only ask whether a key exists. Same for every integration key.
+**Settings… → Claude → Chat with** chooses what Mochi's chat talks to:
+
+- **Claude Code (your subscription)** runs each turn through the `claude` you
+  already have installed and signed in. No API key, and it counts against your
+  Claude plan. Mochi gets web search and can read a dropped file; nothing else.
+- **Anthropic API key** calls the API directly with a key from
+  [console.anthropic.com](https://console.anthropic.com), billed per use. A token
+  from `claude setup-token` is not an API key and will be rejected.
+
+The model is picked in the same place; **Other model…** takes any model ID. The
+newest models may need an up-to-date Claude Code (`claude update`).
+
+Keys live in the **Windows Credential Manager**, never on disk and never in the
+interface — the island can only ask whether a key exists. Same for every
+integration key.
 
 No telemetry. The only network requests Coucou makes are to the services you
 configure yourself.
@@ -142,9 +157,8 @@ problems. It stays on your machine.
   the top edge instead of hiding in a notch.
 - Permission approval works from **any** terminal; the Mac build only listens to
   VS Code sessions.
-- Not in this version: sending a file by email, dragging Mochi onto a window to
-  attach it as context, and jumping to a specific terminal window — "Open
-  terminal" opens the working folder in VS Code when `code` is on your `PATH`.
+- Not in this version: sending a file by email, and dragging Mochi onto a window
+  to attach it as context.
 - Cal.com shows the next bookings as a list rather than the Mac's calendar.
 
 ## Linux
@@ -179,5 +193,6 @@ What changes on Linux:
 - **Files**: preferences in `~/.config/coucou/`, the log at
   `~/.local/share/coucou/coucou.log`.
 - What the Windows build leaves out, this one does too: sending a file by
-  email, dragging Mochi onto a window, and jumping to a specific terminal
-  window — "Open terminal" opens the folder in VS Code.
+  email and dragging Mochi onto a window. Jumping to the session's own window
+  is Windows-only for now — here "Open terminal" opens the folder in VS Code
+  or Zed.

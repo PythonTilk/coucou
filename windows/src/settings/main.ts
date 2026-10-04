@@ -171,17 +171,36 @@ function claudeSection(status: HookStatus): HTMLElement {
   return section;
 }
 
-// ── Claude API section ────────────────────────────────────────────────────────
+// ── Claude chat section ───────────────────────────────────────────────────────
 
 const MODELS: [string, string][] = [
+  ["claude-opus-5-5", "Claude Opus 5.5"],
   ["claude-opus-5", "Claude Opus 5"],
+  ["claude-sonnet-5-5", "Claude Sonnet 5.5"],
   ["claude-sonnet-5", "Claude Sonnet 5"],
   ["claude-haiku-4-5", "Claude Haiku 4.5"],
+  ["claude-fable-5-1", "Claude Fable 5.1"],
 ];
+/** The entry that reveals a field for any other model ID. */
+const CUSTOM_MODEL = "custom";
 
-function apiSection(hasKey: boolean): HTMLElement {
-  const dot = statusDot(hasKey);
-  const state = h("span", { class: "hint", text: hasKey ? "Key saved in the Windows Credential Manager." : "No key yet — the chat needs one." });
+const BACKEND_HINTS = {
+  cli: {
+    ready: "The chat runs through Claude Code, on the account it is signed in to. No API key needed.",
+    missing: "Claude Code was not found. Install it and run `claude` once to sign in.",
+  },
+  api: {
+    ready: "Key saved in the Windows Credential Manager.",
+    missing: "No key yet — the chat needs one.",
+  },
+};
+
+function apiSection(hasKey: boolean, hasCli: boolean): HTMLElement {
+  const ready = () => (settings.backend === "cli" ? hasCli : hasKey);
+  const hint = () => BACKEND_HINTS[settings.backend][ready() ? "ready" : "missing"];
+
+  const dot = statusDot(ready());
+  const state = h("span", { class: "hint", text: hint() });
 
   const field = h("input", {
     type: "password",
@@ -195,15 +214,29 @@ function apiSection(hasKey: boolean): HTMLElement {
   const clearBtn = h("button", { class: "danger", text: "Remove" });
   const feedback = h("div", {});
 
+  const keyRow = h("div", { class: "row" });
+
   async function refresh() {
-    const present = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
-    dot.style.background = present ? "#22c55e" : "#f4505e";
-    state.textContent = present
-      ? "Key saved in the Windows Credential Manager."
-      : "No key yet — the chat needs one.";
-    field.placeholder = present ? "••••••••••••  (stored)" : "sk-ant-...";
-    clearBtn.style.display = present ? "" : "none";
+    hasKey = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
+    dot.style.background = ready() ? "#22c55e" : "#f4505e";
+    state.textContent = hint();
+    field.placeholder = hasKey ? "••••••••••••  (stored)" : "sk-ant-...";
+    clearBtn.style.display = hasKey ? "" : "none";
+    // The key only matters to the API; Claude Code signs in on its own.
+    keyRow.style.display = settings.backend === "api" ? "" : "none";
   }
+
+  const backend = h("select", {}) as HTMLSelectElement;
+  backend.append(
+    h("option", { value: "cli", text: "Claude Code (your subscription)" }),
+    h("option", { value: "api", text: "Anthropic API key" }),
+  );
+  backend.value = settings.backend;
+  backend.addEventListener("change", () => {
+    settings.backend = backend.value as Settings["backend"];
+    void save();
+    void refresh();
+  });
 
   saveBtn.addEventListener("click", async () => {
     const value = field.value.trim();
@@ -232,24 +265,56 @@ function apiSection(hasKey: boolean): HTMLElement {
 
   const model = h("select", {}) as HTMLSelectElement;
   for (const [id, label] of MODELS) model.append(h("option", { value: id, text: label }));
-  if (!MODELS.some(([id]) => id === settings.model)) {
-    model.append(h("option", { value: settings.model, text: settings.model }));
-  }
-  model.value = settings.model;
+  model.append(h("option", { value: CUSTOM_MODEL, text: "Other model…" }));
+
+  const customModel = h("input", {
+    type: "text",
+    placeholder: "Model ID, e.g. claude-opus-5",
+    style: "flex:1 1 auto;min-width:0",
+    autocomplete: "off",
+    spellcheck: "false",
+  }) as HTMLInputElement;
+
+  // A model that is not in the list — typed here earlier, or set by hand in
+  // settings.json — is shown in the field rather than silently replaced.
+  const listed = MODELS.some(([id]) => id === settings.model);
+  model.value = listed ? settings.model : CUSTOM_MODEL;
+  customModel.value = listed ? "" : settings.model;
+  customModel.style.display = listed ? "none" : "";
+
   model.addEventListener("change", () => {
+    const custom = model.value === CUSTOM_MODEL;
+    customModel.style.display = custom ? "" : "none";
+    if (custom) {
+      customModel.focus();
+      return; // nothing to save until an ID is typed
+    }
     settings.model = model.value;
     void save();
   });
+  customModel.addEventListener("change", () => {
+    const id = customModel.value.trim();
+    if (!id) return;
+    settings.model = id;
+    void save();
+  });
 
+  keyRow.append(h("label", { text: "API key" }), field, saveBtn, clearBtn);
   clearBtn.style.display = hasKey ? "" : "none";
+  keyRow.style.display = settings.backend === "api" ? "" : "none";
 
   return h(
     "section",
     {},
     h("h2", {}, dot, h("span", { text: "Claude" })),
     state,
-    h("div", { class: "row" }, h("label", { text: "API key" }), field, saveBtn, clearBtn),
-    h("div", { class: "row" }, h("label", { text: "Model" }), model),
+    h("div", { class: "row" }, h("label", { text: "Chat with" }), backend),
+    keyRow,
+    h("div", { class: "row" }, h("label", { text: "Model" }), model, customModel),
+    h("div", {
+      class: "hint",
+      text: "The newest models may need an up-to-date Claude Code (`claude update`), and some are not included in every plan.",
+    }),
     feedback,
   );
 }
@@ -430,6 +495,7 @@ async function main() {
   };
 
   const hasKey = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
+  const hasCli = (await Bridge.claudeCliPresent()) ?? false;
 
   const keys = [
     "stripe-api-key", "github-token", "vercel-token",
@@ -442,7 +508,7 @@ async function main() {
   root.append(
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
     claudeSection(status),
-    apiSection(hasKey),
+    apiSection(hasKey, hasCli),
     integrationsSection(present),
     generalSection(),
     h("div", {

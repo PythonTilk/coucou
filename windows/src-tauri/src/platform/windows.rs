@@ -15,8 +15,10 @@ use ::windows::Win32::System::SystemInformation::GetLocalTime;
 use ::windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use ::windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
 use ::windows::Win32::UI::WindowsAndMessaging::{
-    EnumChildWindows, GetClassNameW, GetCursorPos, GetWindowLongPtrW, SetWindowLongPtrW,
-    GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos, GetWindowLongPtrW,
+    GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindow, IsWindowVisible,
+    SetForegroundWindow, SetWindowLongPtrW, ShowWindow, GWL_EXSTYLE, SW_RESTORE,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
 use super::LocalTime;
@@ -100,6 +102,71 @@ pub fn find_on_path(stem: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+// ── Session windows ───────────────────────────────────────────────────────────
+
+/// A visible top-level window: (handle, owning process, title).
+type TopWindow = (isize, u32, String);
+
+/// Brings forward the window a Claude Code session runs in.
+///
+/// `pids` is the session's process ancestry, nearest first, as reported by
+/// coucou-hook: the first of them that owns a window is the terminal or editor
+/// hosting it. `console` is the classic console window, when there is one.
+pub fn focus_session_window(pids: &[u32], console: Option<u64>, folder: &str) -> bool {
+    let mut windows: Vec<TopWindow> = Vec::new();
+    unsafe {
+        let _ = EnumWindows(Some(collect_window), LPARAM(&mut windows as *mut _ as isize));
+    }
+    let target = pick_session_window(&windows, pids, folder).or_else(|| {
+        let hwnd = console? as isize;
+        let live = unsafe {
+            let h = HWND(hwnd as *mut _);
+            IsWindow(Some(h)).as_bool() && IsWindowVisible(h).as_bool()
+        };
+        live.then_some(hwnd)
+    });
+    let Some(hwnd) = target else { return false };
+    unsafe {
+        let hwnd = HWND(hwnd as *mut _);
+        if IsIconic(hwnd).as_bool() {
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+        }
+        SetForegroundWindow(hwnd).as_bool()
+    }
+}
+
+/// The nearest ancestor with a window wins. An editor keeps all its windows in
+/// one process, so among those the one named after the project folder is taken;
+/// failing that the first, which is the one used most recently.
+fn pick_session_window(windows: &[TopWindow], pids: &[u32], folder: &str) -> Option<isize> {
+    let folder = folder.to_lowercase();
+    for pid in pids {
+        let owned: Vec<&TopWindow> = windows.iter().filter(|w| w.1 == *pid).collect();
+        let Some(first) = owned.first() else { continue };
+        let named = owned
+            .iter()
+            .find(|w| !folder.is_empty() && w.2.to_lowercase().contains(&folder));
+        return Some(named.unwrap_or(first).0);
+    }
+    None
+}
+
+unsafe extern "system" fn collect_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let windows = unsafe { &mut *(lparam.0 as *mut Vec<TopWindow>) };
+    if unsafe { IsWindowVisible(hwnd) }.as_bool() {
+        let mut title = [0u16; 256];
+        let len = unsafe { GetWindowTextW(hwnd, &mut title) };
+        // Untitled windows are helpers — tooltips, IME, hidden owners.
+        if len > 0 {
+            let mut pid = 0u32;
+            unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+            let title = String::from_utf16_lossy(&title[..len as usize]);
+            windows.push((hwnd.0 as isize, pid, title));
+        }
+    }
+    true.into()
 }
 
 // ── Who we are ────────────────────────────────────────────────────────────────
@@ -233,3 +300,37 @@ pub fn set_activating(win: &WebviewWindow, activating: bool) {
 
 /// Click-through here is the poll's WS_EX_TRANSPARENT toggle, not a region.
 pub fn set_input_region(_win: &WebviewWindow, _rect: Option<(f64, f64, f64, f64)>) {}
+
+#[cfg(test)]
+mod tests {
+    use super::pick_session_window;
+
+    fn windows() -> Vec<super::TopWindow> {
+        vec![
+            (1, 700, "notes — Zed".into()),
+            (2, 700, "coucou — Zed".into()),
+            (3, 500, "Windows PowerShell".into()),
+        ]
+    }
+
+    #[test]
+    fn the_nearest_ancestor_with_a_window_wins() {
+        // 900 and 800 are Claude Code and its shell: no windows of their own.
+        assert_eq!(pick_session_window(&windows(), &[900, 800, 500, 700], ""), Some(3));
+    }
+
+    #[test]
+    fn an_editor_window_is_picked_by_project_folder() {
+        assert_eq!(pick_session_window(&windows(), &[900, 700], "Coucou"), Some(2));
+    }
+
+    #[test]
+    fn an_unknown_folder_falls_back_to_the_most_recent_window() {
+        assert_eq!(pick_session_window(&windows(), &[700], "elsewhere"), Some(1));
+    }
+
+    #[test]
+    fn no_window_means_nothing_to_focus() {
+        assert_eq!(pick_session_window(&windows(), &[900, 800], "coucou"), None);
+    }
+}

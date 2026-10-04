@@ -5,7 +5,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import type { Settings } from "./state";
+import type { SessionHost, Settings } from "./state";
 
 export const IS_TAURI =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -52,8 +52,16 @@ export const Bridge = {
 
   openUrl: (url: string) => call<void>("open_url", { url }),
 
-  /** "Open terminal" → opens the folder in VS Code when `code` is on PATH. */
-  openInVSCode: (path: string | null) => call<boolean>("open_in_vscode", { path }),
+  /**
+   * "Open terminal" → brings forward the window the session runs in (terminal,
+   * VS Code, Zed…), or opens the folder in an editor when it cannot be found.
+   */
+  openSession: (path: string | null, host: SessionHost | null) =>
+    call<boolean>("open_session", {
+      path,
+      hostPids: host?.pids ?? [],
+      hostHwnd: host?.hwnd ?? null,
+    }),
 
   quit: () => call<void>("quit_app"),
 
@@ -77,6 +85,10 @@ export const Bridge = {
     call<void>("approval_decision", { requestId, decision }),
   /** "The card is up" — until this lands the relay only waits a moment. */
   approvalAck: (requestId: string) => call<void>("approval_ack", { requestId }),
+  /** Answers a question Claude Code asked: question text → chosen label. */
+  approvalAnswer: (requestId: string, answers: Record<string, string>) =>
+    call<void>("approval_answer", { requestId, answers }),
+
   /** "Nobody can act on this" — Claude Code asks in the terminal right away. */
   approvalDecline: (requestId: string) => call<void>("approval_decline", { requestId }),
 
@@ -85,6 +97,8 @@ export const Bridge = {
   chatSend: (query: string, context: ChatContext | null) =>
     callOrThrow<{ text: string }>("chat_send", { query, context }),
   chatReset: () => call<void>("chat_reset"),
+  /** Whether the Claude Code chat backend has a `claude` to run. */
+  claudeCliPresent: () => call<boolean>("claude_cli_present"),
   /** Copies a dropped file into the inbox. */
   ingestFile: (path: string) => callOrThrow<DroppedFile>("ingest_file", { path }),
   /** Only ever tells you whether a key exists — never its value. */

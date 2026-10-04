@@ -44,8 +44,15 @@ mod unix;
 #[cfg(target_os = "linux")]
 use unix::connect;
 
+/// Set by Coucou on the `claude` it runs for its own chat. Those turns are
+/// Mochi answering, not a session to show on the island.
+const CHAT_MARKER: &str = "COUCOU_CHAT";
+
 fn main() {
-    let Some((payload, event)) = read_event() else { std::process::exit(0) };
+    if std::env::var_os(CHAT_MARKER).is_some() {
+        std::process::exit(0);
+    }
+    let Some((payload, event, question)) = read_event() else { std::process::exit(0) };
 
     let waits_for_answer = event == "PermissionRequest";
     let budget = if waits_for_answer { DECISION_BUDGET } else { FIRE_AND_FORGET_BUDGET };
@@ -60,7 +67,7 @@ fn main() {
     });
 
     if let Ok(Some(decision)) = rx.recv_timeout(budget) {
-        if let Some(json) = decision_json(&decision) {
+        if let Some(json) = decision_json(&decision, question.as_ref()) {
             let mut out = std::io::stdout();
             let _ = writeln!(out, "{json}");
             let _ = out.flush();
@@ -73,7 +80,30 @@ fn main() {
 /// The documented PermissionRequest output. Anything we do not recognise prints
 /// nothing at all rather than guessing — silence is the safe answer.
 /// See https://code.claude.com/docs/en/hooks
-fn decision_json(decision: &str) -> Option<String> {
+///
+/// `question` is the AskUserQuestion input, when that is what is being asked:
+/// the island may then answer it, which Claude Code takes as the same input
+/// with an `answers` map added. Nothing else of the input can be changed from
+/// the island, and no other tool's input can be changed at all.
+fn decision_json(decision: &str, question: Option<&serde_json::Value>) -> Option<String> {
+    if decision.trim_start().starts_with('{') {
+        let reply = serde_json::from_str::<serde_json::Value>(decision).ok()?;
+        let answers = reply.get("answers")?.as_object()?;
+        if answers.is_empty() || !answers.values().all(|v| v.is_string()) {
+            return None;
+        }
+        let mut input = question?.as_object()?.clone();
+        input.insert("answers".into(), serde_json::Value::Object(answers.clone()));
+        return Some(
+            serde_json::json!({
+                "hookSpecificOutput": {
+                    "hookEventName": "PermissionRequest",
+                    "decision": { "behavior": "allow", "updatedInput": input },
+                }
+            })
+            .to_string(),
+        );
+    }
     let behavior = match decision.trim() {
         // "always" still answers a plain allow; remembering it is the island's
         // business, not Claude Code's.
@@ -86,8 +116,9 @@ fn decision_json(decision: &str) -> Option<String> {
     ))
 }
 
-/// Reads stdin and returns the payload to forward plus the event name.
-fn read_event() -> Option<(String, String)> {
+/// Reads stdin and returns the payload to forward, the event name, and — for an
+/// AskUserQuestion permission request — the question as Claude Code sent it.
+fn read_event() -> Option<(String, String, Option<serde_json::Value>)> {
     let mut raw = Vec::new();
     if std::io::stdin().read_to_end(&mut raw).is_err() || raw.is_empty() {
         return None;
@@ -161,11 +192,30 @@ fn read_event() -> Option<(String, String)> {
         }
     }
 
+    // Which window the session lives in, so a click on the island can bring it
+    // forward whatever it is: a terminal, VS Code, Zed, anything.
+    #[cfg(windows)]
+    {
+        let pids = win::ancestor_pids();
+        if !pids.is_empty() {
+            map.insert("host_pids".into(), serde_json::json!(pids));
+        }
+        if let Some(hwnd) = win::console_window() {
+            map.insert("host_hwnd".into(), serde_json::json!(hwnd));
+        }
+    }
+
+    // Kept whole: what goes back to Claude Code must be its own input, not the
+    // shortened copy the island is shown.
+    let question = (map.get("tool_name").and_then(|v| v.as_str()) == Some("AskUserQuestion"))
+        .then(|| map.get("tool_input").cloned())
+        .flatten();
+
     truncate_strings(&mut payload);
 
     let mut line = payload.to_string();
     line.push('\n');
-    Some((line, event))
+    Some((line, event, question))
 }
 
 /// Caps every string in the payload. A single Write can carry a whole file.
@@ -226,23 +276,46 @@ mod tests {
     #[test]
     fn decision_json_matches_the_documented_shape() {
         assert_eq!(
-            decision_json("allow").unwrap(),
+            decision_json("allow", None).unwrap(),
             r#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}"#
         );
         assert_eq!(
-            decision_json("deny").unwrap(),
+            decision_json("deny", None).unwrap(),
             r#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Denied from Coucou"}}}"#
         );
         // "always" is an island concept; Claude Code just gets an allow.
-        assert!(decision_json("always").unwrap().contains(r#""behavior":"allow""#));
+        assert!(decision_json("always", None).unwrap().contains(r#""behavior":"allow""#));
     }
 
     #[test]
     fn anything_unrecognised_prints_nothing() {
-        assert!(decision_json("").is_none());
-        assert!(decision_json("maybe").is_none());
+        assert!(decision_json("", None).is_none());
+        assert!(decision_json("maybe", None).is_none());
         // The shape the app used to send must not be mistaken for a decision.
-        assert!(decision_json(r#"{"permissionDecision":"allow"}"#).is_none());
+        assert!(decision_json(r#"{"permissionDecision":"allow"}"#, None).is_none());
+    }
+
+    #[test]
+    fn an_answered_question_goes_back_as_the_same_input_plus_answers() {
+        let question = serde_json::json!({
+            "questions": [{ "question": "Which one?", "options": [{ "label": "A" }, { "label": "B" }] }]
+        });
+        let out = decision_json(r#"{"answers":{"Which one?":"B"}}"#, Some(&question)).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let decision = &v["hookSpecificOutput"]["decision"];
+        assert_eq!(decision["behavior"], "allow");
+        assert_eq!(decision["updatedInput"]["questions"], question["questions"]);
+        assert_eq!(decision["updatedInput"]["answers"]["Which one?"], "B");
+    }
+
+    #[test]
+    fn answers_are_only_accepted_for_a_question() {
+        // Any other tool: the island cannot rewrite its input.
+        assert!(decision_json(r#"{"answers":{"q":"a"}}"#, None).is_none());
+        let question = serde_json::json!({ "questions": [] });
+        assert!(decision_json(r#"{"answers":{}}"#, Some(&question)).is_none());
+        assert!(decision_json(r#"{"answers":{"q":1}}"#, Some(&question)).is_none());
+        assert!(decision_json(r#"{"command":"rm -rf /"}"#, Some(&question)).is_none());
     }
 
     #[test]

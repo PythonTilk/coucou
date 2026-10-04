@@ -134,6 +134,12 @@ pub fn reveal_folder(path: &str) {
     let _ = Command::new("xdg-open").arg(path).spawn();
 }
 
+/// Not on Linux yet: Wayland lets no app raise the window of another. The
+/// caller falls back to opening the folder in an editor.
+pub fn focus_session_window(_pids: &[u32], _console: Option<u64>, _folder: &str) -> bool {
+    false
+}
+
 /// Our own `which`: the first executable file named `stem` on $PATH.
 pub fn find_on_path(stem: &str) -> Option<PathBuf> {
     let dirs = std::env::var_os("PATH")?;

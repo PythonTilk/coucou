@@ -1,6 +1,7 @@
 // Coucou for Windows — app wiring and the commands the island calls.
 
 mod claude;
+mod claude_cli;
 mod files;
 mod hooks;
 mod integrations;
@@ -132,17 +133,34 @@ fn open_url(url: String) {
     platform::open_url(&url);
 }
 
-/// "Open terminal" opens the working folder in VS Code when `code` is on PATH,
-/// and falls back to the file manager otherwise.
+/// "Open terminal" brings forward the window the session is running in — a
+/// terminal, VS Code, Zed, whatever it is. When that window cannot be found
+/// (the session is over, say) the working folder opens in an editor instead.
 #[tauri::command]
-fn open_in_vscode(path: Option<String>) -> bool {
+fn open_session(path: Option<String>, host_pids: Vec<u32>, host_hwnd: Option<u64>) -> bool {
+    // The window title usually carries the project folder's name, which is what
+    // tells two windows of the same editor apart.
+    let folder = path
+        .as_deref()
+        .and_then(|p| std::path::Path::new(p).file_name())
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if platform::focus_session_window(&host_pids, host_hwnd, &folder) {
+        return true;
+    }
+    open_in_editor(path)
+}
+
+/// Opens the folder in VS Code or Zed, whichever is on PATH, and falls back to
+/// the file manager otherwise.
+fn open_in_editor(path: Option<String>) -> bool {
     // No shell anywhere near this. The path is a project folder chosen by
     // whoever is using Claude Code, and a shell would happily read `&`, `^`, `%`
     // or `$` in a folder name as syntax. Finding the launcher ourselves and
     // handing the path over as a separate argument keeps it a path.
     let path = path.filter(|p| !p.is_empty());
     // It arrives in a hook payload: only an existing folder, given by its full
-    // path, goes any further. `code` would read `--something` as an option, and
+    // path, goes any further. An editor would read `--something` as an option, and
     // xdg-open would launch a file with whatever handles its type.
     if let Some(p) = path.as_deref() {
         let p = std::path::Path::new(p);
@@ -150,8 +168,9 @@ fn open_in_vscode(path: Option<String>) -> bool {
             return false;
         }
     }
-    if let Some(code) = platform::find_on_path("code") {
-        let mut cmd = Command::new(code);
+    for editor in ["code", "zed"] {
+        let Some(launcher) = platform::find_on_path(editor) else { continue };
+        let mut cmd = Command::new(launcher);
         if let Some(p) = path.as_deref() {
             cmd.arg(p);
         }
@@ -216,6 +235,16 @@ fn approval_decision(app: AppHandle, request_id: String, decision: String) {
     pipe::answer(&app, &request_id, &decision);
 }
 
+/// An option picked on the island for a question Claude Code asked.
+#[tauri::command]
+fn approval_answer(
+    app: AppHandle,
+    request_id: String,
+    answers: std::collections::HashMap<String, String>,
+) {
+    pipe::answer_question(&app, &request_id, &answers);
+}
+
 /// The island has the card on screen, so the long wait for a human may begin.
 /// Until this arrives the relay only waits a few hundred milliseconds, which is
 /// what stops a paused or unresponsive island from freezing Claude Code.
@@ -241,8 +270,17 @@ async fn chat_send(
     query: String,
     context: Option<ChatContext>,
 ) -> Result<ChatReply, String> {
-    let model = shared.settings.lock().unwrap().model.clone();
-    claude::send(&chat, &model, query, context).await
+    let (backend, model) = {
+        let settings = shared.settings.lock().unwrap();
+        (settings.backend.clone(), settings.model.clone())
+    };
+    claude::send(&chat, &backend, &model, query, context).await
+}
+
+/// Whether the Claude Code backend has a `claude` to run.
+#[tauri::command]
+fn claude_cli_present() -> bool {
+    claude_cli::find_claude().is_some()
 }
 
 #[tauri::command]
@@ -382,17 +420,19 @@ pub fn run() {
             focus_window,
             reposition,
             open_url,
-            open_in_vscode,
+            open_session,
             quit_app,
             hooks_status,
             hooks_preview,
             hooks_apply,
             approval_decision,
+            approval_answer,
             approval_ack,
             approval_decline,
             log_line,
             chat_send,
             chat_reset,
+            claude_cli_present,
             ingest_file,
             secret_present,
             secret_set,

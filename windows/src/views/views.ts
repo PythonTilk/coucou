@@ -21,6 +21,10 @@ export interface ViewActions {
   openTarget(): void;
   openUrl(url: string): void;
   decide(d: "allow" | "deny"): void;
+  /** Answers the question Claude Code asked: question text → chosen label. */
+  answer(answers: Record<string, string>): void;
+  /** Hands the pending request back to the terminal. */
+  answerInTerminal(): void;
   toggleSound(): void;
   setVolume(v: number): void;
   setAutoClose(seconds: number): void;
@@ -172,7 +176,7 @@ function buildOverview(actions: ViewActions): ViewHost {
         mode = null;
       }
 
-      // VS Code with a live Claude Code session keeps the ticker; every other
+      // The Claude Code pill with a live session keeps the ticker; every other
       // pill shows its own card, exactly like IntegrationCardView.
       const sessionActive =
         task?.id === "integration_claude" && (task.state !== "idle" || task.steps.length > 0);
@@ -227,7 +231,7 @@ function buildOverview(actions: ViewActions): ViewHost {
 }
 
 function buildPill(task: AgentTask, actions: ViewActions): HTMLElement {
-  const label = task.id === "integration_claude" ? "VS Code" : task.name;
+  const label = task.id === "integration_claude" ? "Claude Code" : task.name;
   const canvas = createMiniBot(task, 24);
   const pill = h(
     "div",
@@ -319,20 +323,93 @@ function buildApproval(actions: ViewActions): ViewHost {
 
 // ── Question ──────────────────────────────────────────────────────────────────
 
-function buildQuestion(): ViewHost {
+function buildQuestion(actions: ViewActions): ViewHost {
   const who = h("div");
-  const title = h("div", { class: "title" });
-  const row = h("div", { class: "actions" });
+  const title = h("div", { class: "title question-text" });
+  const row = h("div", { class: "actions options" });
   const el = h("div", { class: "view" }, card("cyan", stack(116, 16, who, title, row)));
+
+  // Where we are in the request on screen: which question, what is answered so
+  // far, and what is ticked in a pick-several question.
+  let requestId = "";
+  let index = 0;
+  let answers: Record<string, string> = {};
+  let picked = new Set<string>();
+  // The buttons are only rebuilt when what they show changes: rebuilding them
+  // between a mouse-down and a mouse-up would swallow the click.
+  let rowKey = "";
+
+  const next = (question: string, answer: string, total: number) => {
+    answers[question] = answer;
+    picked = new Set();
+    index += 1;
+    if (index >= total) actions.answer(answers);
+    else State.notify();
+  };
+
   return {
     el,
     sync() {
+      const questions = State.pendingApproval?.questions;
       clear(who);
-      who.append(agentWho(State.focusTask, "Claude Code is asking a question"));
-      const task = State.focusTask;
-      title.textContent = task?.steps.at(-1) ?? "Claude needs an answer.";
+
+      // A question that arrived as a notification has nothing to pick from.
+      if (!questions) {
+        who.append(agentWho(State.focusTask, "is asking a question"));
+        title.textContent = State.focusTask?.steps.at(-1) ?? "Claude needs an answer.";
+        if (rowKey !== "terminal") {
+          rowKey = "terminal";
+          clear(row);
+          row.append(h("div", { class: "sub", text: "Answer it in your terminal." }));
+        }
+        return;
+      }
+
+      if (State.pendingApproval!.requestId !== requestId) {
+        requestId = State.pendingApproval!.requestId;
+        index = 0;
+        answers = {};
+        picked = new Set();
+      }
+      const q = questions[Math.min(index, questions.length - 1)];
+      const step = questions.length > 1 ? ` (${index + 1} of ${questions.length})` : "";
+      who.append(agentWho(State.focusTask, `is asking${step}`));
+      title.textContent = q.question;
+      title.title = q.question;
+
+      const key = `${requestId}:${index}:${[...picked].join("|")}`;
+      if (rowKey === key) return;
+      rowKey = key;
       clear(row);
-      row.append(h("div", { class: "sub", text: "Answer in your terminal — Coucou can't reply for you yet." }));
+      for (const option of q.options) {
+        const on = picked.has(option.label);
+        const button = btn(option.label, on ? "primary" : "secondary", () => {
+          if (!q.multiSelect) {
+            next(q.question, option.label, questions.length);
+            return;
+          }
+          if (on) picked.delete(option.label);
+          else picked.add(option.label);
+          State.notify();
+        });
+        if (option.description) button.title = option.description;
+        row.append(button);
+      }
+      if (q.multiSelect) {
+        const done = btn("Done", "primary", () => {
+          if (picked.size > 0) next(q.question, [...picked].join(", "), questions.length);
+        });
+        if (picked.size === 0) done.classList.add("off");
+        row.append(done);
+      }
+      row.append(
+        h("button", {
+          class: "link-btn",
+          style: "color:#8e939c",
+          text: "Answer in terminal",
+          onclick: () => actions.answerInTerminal(),
+        }),
+      );
     },
   };
 }
@@ -464,7 +541,11 @@ function buildSettings(actions: ViewActions): ViewHost {
         h("span", { text: "Claude Code" }),
       );
       clear(apiBadge);
-      apiBadge.append(dot("#F4505E", 6), h("span", { text: "API" }));
+      // The subscription needs no key, so there is nothing left to set up.
+      apiBadge.append(
+        dot(s.backend === "cli" ? "#22C55E" : "#F4505E", 6),
+        h("span", { text: s.backend === "cli" ? "Subscription" : "API" }),
+      );
     },
   };
 }
@@ -491,7 +572,7 @@ export function buildViews(
   map.set("overview", buildOverview(actions));
   map.set("empty", buildEmpty(actions));
   map.set("approval", buildApproval(actions));
-  map.set("question", buildQuestion());
+  map.set("question", buildQuestion(actions));
   map.set("error", buildError(actions));
   map.set("finished", buildFinished(actions));
   map.set("confused", buildConfused());

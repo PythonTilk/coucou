@@ -14,9 +14,11 @@
 //   * whatever happens we drop the connection after the decision timeout, and
 //     the terminal takes over.
 //
-// What we write back is the bare word `allow` or `deny`. Turning that into the
-// documented hookSpecificOutput JSON is coucou-hook's job, so the wire format
-// Claude Code expects lives in exactly one place.
+// What we write back is the bare word `allow` or `deny` — or, when the request
+// was Claude Code asking a question, `{"answers":{…}}` with what was picked on
+// the island. Turning either into the documented hookSpecificOutput JSON is
+// coucou-hook's job, so the wire format Claude Code expects lives in exactly
+// one place.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -230,7 +232,7 @@ async fn wait_for_decision(id: &str, rx: &mut mpsc::Receiver<Reply>) -> Option<S
         Ok(Some(Reply::Ack)) => {}
         // A click that beats the ack is still a click.
         Ok(Some(Reply::Decision(d))) => {
-            log::line(format!("hook id={id} answered {d}"));
+            log::line(format!("hook id={id} answered {}", loggable(&d)));
             return Some(d);
         }
         Ok(Some(Reply::Decline)) => {
@@ -246,7 +248,7 @@ async fn wait_for_decision(id: &str, rx: &mut mpsc::Receiver<Reply>) -> Option<S
 
     match tokio::time::timeout(DECISION_TIMEOUT, rx.recv()).await {
         Ok(Some(Reply::Decision(d))) => {
-            log::line(format!("hook id={id} answered {d}"));
+            log::line(format!("hook id={id} answered {}", loggable(&d)));
             Some(d)
         }
         Ok(Some(Reply::Decline)) => {
@@ -258,6 +260,11 @@ async fn wait_for_decision(id: &str, rx: &mut mpsc::Receiver<Reply>) -> Option<S
             None
         }
     }
+}
+
+/// The log says a question was answered, never with what.
+fn loggable(decision: &str) -> &str {
+    if decision.starts_with('{') { "a question" } else { decision }
 }
 
 fn send(app: &AppHandle, request_id: &str, reply: Reply, keep: bool) {
@@ -294,4 +301,14 @@ pub fn answer(app: &AppHandle, request_id: &str, decision: &str) {
     };
     log::line(format!("decision id={request_id} {word}"));
     send(app, request_id, Reply::Decision(word.to_string()), false);
+}
+
+/// Called when an option is picked for a question Claude Code asked. `answers`
+/// maps each question's text to the chosen label, which is the shape
+/// AskUserQuestion takes them in.
+pub fn answer_question(app: &AppHandle, request_id: &str, answers: &HashMap<String, String>) {
+    log::line(format!("decision id={request_id} answered a question"));
+    // One line: the relay reads up to the first newline.
+    let line = json!({ "answers": answers }).to_string();
+    send(app, request_id, Reply::Decision(line), false);
 }

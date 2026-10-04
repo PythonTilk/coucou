@@ -20,6 +20,14 @@ pub struct Settings {
     /// Defaulted explicitly so a settings.json written by an older build still loads.
     #[serde(default = "default_model")]
     pub model: String,
+    /// What the chat talks to: "api" (Anthropic API key) or "cli" (Claude Code,
+    /// on its own sign-in).
+    #[serde(default = "default_backend")]
+    pub backend: String,
+}
+
+fn default_backend() -> String {
+    crate::claude::BACKEND_API.to_string()
 }
 
 fn default_model() -> String {
@@ -43,6 +51,7 @@ impl Default for Settings {
             autostart: false,
             hooks_installed: false,
             model: default_model(),
+            backend: default_backend(),
         }
     }
 }

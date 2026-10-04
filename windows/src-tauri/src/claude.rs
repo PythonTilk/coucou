@@ -3,6 +3,9 @@
 //
 // Everything happens here rather than in the island: the API key never leaves
 // the Credential Manager, and file bytes never cross the IPC boundary.
+//
+// The chat can also go through Claude Code instead (claude_cli.rs), which needs
+// no key at all.
 
 use std::sync::Mutex;
 
@@ -22,7 +25,12 @@ const MAX_INLINE_TEXT: u64 = 200_000;
 
 pub const DEFAULT_MODEL: &str = "claude-opus-5";
 
-const SYSTEM_PROMPT: &str = "You are Mochi, a personal AI assistant living at the top of the user's screen. \
+/// `Settings::backend`: the Anthropic API with the stored key…
+pub const BACKEND_API: &str = "api";
+/// …or Claude Code, on whatever account it is signed in to.
+pub const BACKEND_CLI: &str = "cli";
+
+pub(crate) const SYSTEM_PROMPT: &str = "You are Mochi, a personal AI assistant living at the top of the user's screen. \
 You have web search access and can help with absolutely anything — research, coding, finding places, recommendations, tasks, questions. \
 Respond in the user's language. Be thorough and complete — use as much detail as the task requires. \
 No markdown formatting (no **, no ##, no bullet dashes). Use plain text with line breaks.";
@@ -31,11 +39,22 @@ No markdown formatting (no **, no ##, no bullet dashes). Use plain text with lin
 pub struct Chat {
     /// Full multi-turn history, including tool_use / tool_result blocks.
     messages: Mutex<Vec<Value>>,
+    /// Claude Code keeps its own history; this is the session to resume.
+    session: Mutex<Option<String>>,
 }
 
 impl Chat {
     pub fn reset(&self) {
         self.messages.lock().unwrap().clear();
+        *self.session.lock().unwrap() = None;
+    }
+
+    pub(crate) fn session(&self) -> Option<String> {
+        self.session.lock().unwrap().clone()
+    }
+
+    pub(crate) fn set_session(&self, id: Option<String>) {
+        *self.session.lock().unwrap() = id;
     }
 
     fn is_empty(&self) -> bool {
@@ -72,10 +91,14 @@ pub struct ChatReply {
 /// in the note view.
 pub async fn send(
     chat: &Chat,
+    backend: &str,
     model: &str,
     query: String,
     context: Option<ChatContext>,
 ) -> Result<ChatReply, String> {
+    if backend == BACKEND_CLI {
+        return crate::claude_cli::send(chat, model, query, context).await;
+    }
     let key = secrets::get("anthropic-api-key")
         .ok_or_else(|| "API key missing. Open settings.".to_string())?;
 

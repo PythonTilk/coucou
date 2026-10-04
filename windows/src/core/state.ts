@@ -19,6 +19,15 @@ export interface AgentTask {
   miniEye?: EyeShape | null;
   pillBadge?: PillBadge | null;
   sessionCwd?: string | null;
+  /** The window the session runs in, as coucou-hook reported it. */
+  sessionHost?: SessionHost | null;
+}
+
+export interface SessionHost {
+  /** The session's process ancestry, nearest first. */
+  pids: number[];
+  /** The classic console window, when there is one. */
+  hwnd: number | null;
 }
 
 export interface ApprovalInfo {
@@ -26,6 +35,15 @@ export interface ApprovalInfo {
   sessionId: string;
   tool: string;
   command: string;
+  /** Set when Claude Code is asking a question rather than for a permission. */
+  questions?: AskedQuestion[];
+}
+
+/** One question of an AskUserQuestion call. */
+export interface AskedQuestion {
+  question: string;
+  options: { label: string; description: string }[];
+  multiSelect: boolean;
 }
 
 export interface ChatMessage {
@@ -58,7 +76,7 @@ const task = (
 
 /** AgentTask.integrationAgents — same ids, names and colours as macOS. */
 export const INTEGRATION_AGENTS: AgentTask[] = [
-  task("integration_claude", "VS Code", "#F5F6F8", "claudeCode"),
+  task("integration_claude", "Claude Code", "#F5F6F8", "claudeCode"),
   task("integration_resend", "Resend", "#22C55E", "n8n"),
   task("integration_n8n", "n8n", "#F29B38", "n8n"),
   task("integration_vercel", "Vercel", "#7C5CFF", "n8n"),
@@ -92,6 +110,8 @@ export interface Settings {
   hooksInstalled: boolean;
   /** Claude model used by the chat. */
   model: string;
+  /** What the chat talks to: the Anthropic API (key) or Claude Code (its own sign-in). */
+  backend: "api" | "cli";
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -106,6 +126,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autostart: false,
   hooksInstalled: false,
   model: "claude-opus-5",
+  backend: "api",
 };
 
 type Listener = () => void;
