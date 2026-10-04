@@ -110,8 +110,14 @@ export interface Settings {
   hooksInstalled: boolean;
   /** Claude model used by the chat. */
   model: string;
-  /** What the chat talks to: the Anthropic API (key) or Claude Code (its own sign-in). */
-  backend: "api" | "cli";
+  /**
+   * What the chat talks to: the Anthropic API (key), Claude Code (its own
+   * sign-in), or any OpenAI-compatible endpoint.
+   */
+  backend: "api" | "cli" | "openai";
+  /** The "openai" backend's endpoint and the model ID sent to it. */
+  customBaseUrl: string;
+  customModel: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -127,6 +133,8 @@ export const DEFAULT_SETTINGS: Settings = {
   hooksInstalled: false,
   model: "claude-opus-5",
   backend: "api",
+  customBaseUrl: "",
+  customModel: "",
 };
 
 type Listener = () => void;

@@ -547,10 +547,8 @@ function buildSettings(actions: ViewActions): ViewHost {
       );
       clear(apiBadge);
       // The subscription needs no key, so there is nothing left to set up.
-      apiBadge.append(
-        dot(s.backend === "cli" ? "#22C55E" : "#F4505E", 6),
-        h("span", { text: s.backend === "cli" ? "Subscription" : "API" }),
-      );
+      const chat = { cli: "Subscription", openai: "Custom", api: "API" }[s.backend] ?? "API";
+      apiBadge.append(dot(s.backend === "api" ? "#F4505E" : "#22C55E", 6), h("span", { text: chat }));
     },
   };
 }

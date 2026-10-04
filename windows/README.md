@@ -45,6 +45,7 @@ installs for the current user only — no admin prompt.
 | Rest the pointer on Mochi for two seconds | Hearts |
 | Drag a file onto the island | Mochi turns into a box, swallows it, then offers to answer questions about it |
 | `Esc` | Closes the island |
+| Click anywhere else | Folds the open island (a card waiting for an answer stays up) |
 | Tray icon | Open, Settings…, Pause, Quit |
 
 Everything else happens on its own: a Claude Code permission request opens the
@@ -81,6 +82,12 @@ folder opens in VS Code or Zed instead.
 - **Anthropic API key** calls the API directly with a key from
   [console.anthropic.com](https://console.anthropic.com), billed per use. A token
   from `claude setup-token` is not an API key and will be rejected.
+
+- **Other provider (OpenAI-compatible)** sends the chat to any endpoint that
+  speaks the OpenAI chat API — OpenRouter, Gemini's compatibility endpoint, a
+  local Ollama or LM Studio. You give it a base URL, a model ID and, if the
+  endpoint wants one, a key. Chat only: no web search, and a dropped file goes
+  as text or as an image.
 
 The model is picked in the same place; **Other model…** takes any model ID. The
 newest models may need an up-to-date Claude Code (`claude update`).

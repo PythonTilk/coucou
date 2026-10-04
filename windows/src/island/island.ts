@@ -344,6 +344,11 @@ export class Island {
     this.fsm.forcePetit();
   }
 
+  /** A click anywhere else folds the open island — unless a card is waiting for an answer. */
+  dismissOutside() {
+    if (State.mode === "expanded" && !State.isPinned) this.collapse();
+  }
+
   /** Alert from the hook server: open on this view. Pinned alerts never auto-close. */
   alert(view: IslandViewName) {
     this.fsm.pinned = State.isPinned;

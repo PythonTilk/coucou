@@ -184,66 +184,36 @@ const MODELS: [string, string][] = [
 /** The entry that reveals a field for any other model ID. */
 const CUSTOM_MODEL = "custom";
 
-const BACKEND_HINTS = {
-  cli: {
-    ready: "The chat runs through Claude Code, on the account it is signed in to. No API key needed.",
-    missing: "Claude Code was not found. Install it and run `claude` once to sign in.",
-  },
-  api: {
-    ready: "Key saved in the Windows Credential Manager.",
-    missing: "No key yet — the chat needs one.",
-  },
-};
-
-function apiSection(hasKey: boolean, hasCli: boolean): HTMLElement {
-  const ready = () => (settings.backend === "cli" ? hasCli : hasKey);
-  const hint = () => BACKEND_HINTS[settings.backend][ready() ? "ready" : "missing"];
-
-  const dot = statusDot(ready());
-  const state = h("span", { class: "hint", text: hint() });
-
+/** A password field for one Credential Manager key, with Save and Remove. */
+function keyRow(
+  label: string,
+  key: string,
+  placeholder: string,
+  feedback: HTMLElement,
+  onChange: (present: boolean) => void,
+): { row: HTMLElement; refresh(): Promise<void> } {
   const field = h("input", {
     type: "password",
-    placeholder: hasKey ? "••••••••••••  (stored)" : "sk-ant-...",
     style: "flex:1 1 auto;min-width:0",
     autocomplete: "off",
     spellcheck: "false",
   }) as HTMLInputElement;
-
   const saveBtn = h("button", { class: "primary", text: "Save key" });
   const clearBtn = h("button", { class: "danger", text: "Remove" });
-  const feedback = h("div", {});
-
-  const keyRow = h("div", { class: "row" });
 
   async function refresh() {
-    hasKey = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
-    dot.style.background = ready() ? "#22c55e" : "#f4505e";
-    state.textContent = hint();
-    field.placeholder = hasKey ? "••••••••••••  (stored)" : "sk-ant-...";
-    clearBtn.style.display = hasKey ? "" : "none";
-    // The key only matters to the API; Claude Code signs in on its own.
-    keyRow.style.display = settings.backend === "api" ? "" : "none";
+    const present = (await Bridge.secretPresent(key)) ?? false;
+    field.placeholder = present ? "••••••••••••  (stored)" : placeholder;
+    clearBtn.style.display = present ? "" : "none";
+    onChange(present);
   }
-
-  const backend = h("select", {}) as HTMLSelectElement;
-  backend.append(
-    h("option", { value: "cli", text: "Claude Code (your subscription)" }),
-    h("option", { value: "api", text: "Anthropic API key" }),
-  );
-  backend.value = settings.backend;
-  backend.addEventListener("change", () => {
-    settings.backend = backend.value as Settings["backend"];
-    void save();
-    void refresh();
-  });
 
   saveBtn.addEventListener("click", async () => {
     const value = field.value.trim();
     if (!value) return;
     clear(feedback);
     try {
-      await Bridge.secretSet("anthropic-api-key", value);
+      await Bridge.secretSet(key, value);
       field.value = "";
       feedback.append(h("div", { class: "notice ok", text: "Saved. It never touches disk." }));
       await refresh();
@@ -255,12 +225,84 @@ function apiSection(hasKey: boolean, hasCli: boolean): HTMLElement {
   clearBtn.addEventListener("click", async () => {
     clear(feedback);
     try {
-      await Bridge.secretClear("anthropic-api-key");
+      await Bridge.secretClear(key);
       feedback.append(h("div", { class: "notice ok", text: "Key removed." }));
       await refresh();
     } catch (err) {
       feedback.append(h("div", { class: "notice err", text: `Could not remove: ${String(err)}` }));
     }
+  });
+
+  return { row: h("div", { class: "row" }, h("label", { text: label }), field, saveBtn, clearBtn), refresh };
+}
+
+/** A text field bound to one preference. */
+function textRow(label: string, value: string, placeholder: string, onChange: (v: string) => void): HTMLElement {
+  const field = h("input", {
+    type: "text",
+    value,
+    placeholder,
+    style: "flex:1 1 auto;min-width:0",
+    autocomplete: "off",
+    spellcheck: "false",
+  }) as HTMLInputElement;
+  field.addEventListener("change", () => onChange(field.value.trim()));
+  return h("div", { class: "row" }, h("label", { text: label }), field);
+}
+
+function apiSection(hasCli: boolean): HTMLElement {
+  let hasKey = false;
+  const feedback = h("div", {});
+  const dot = statusDot(false);
+  const state = h("span", { class: "hint" });
+  const note = h("div", { class: "hint" });
+
+  /** Whether the chosen backend has what it needs, and what to say about it. */
+  function status(): [boolean, string] {
+    switch (settings.backend) {
+      case "cli":
+        return hasCli
+          ? [true, "The chat runs through Claude Code, on the account it is signed in to. No API key needed."]
+          : [false, "Claude Code was not found. Install it and run `claude` once to sign in."];
+      case "openai":
+        return settings.customBaseUrl && settings.customModel
+          ? [true, "The chat goes to your own endpoint."]
+          : [false, "Enter a base URL and a model ID."];
+      default:
+        return hasKey
+          ? [true, "Key saved in the Windows Credential Manager."]
+          : [false, "No key yet — the chat needs one."];
+    }
+  }
+
+  const anthropicKey = keyRow("API key", "anthropic-api-key", "sk-ant-...", feedback, (present) => {
+    hasKey = present;
+    show();
+  });
+  const customKey = keyRow("API key", "custom-api-key", "Leave empty for a local server", feedback, () => {});
+
+  const baseUrl = textRow("Base URL", settings.customBaseUrl, "https://openrouter.ai/api/v1", (v) => {
+    settings.customBaseUrl = v;
+    void save();
+    show();
+  });
+  const customModelRow = textRow("Model ID", settings.customModel, "e.g. google/gemini-2.5-pro", (v) => {
+    settings.customModel = v;
+    void save();
+    show();
+  });
+
+  const backend = h("select", {}) as HTMLSelectElement;
+  backend.append(
+    h("option", { value: "cli", text: "Claude Code (your subscription)" }),
+    h("option", { value: "api", text: "Anthropic API key" }),
+    h("option", { value: "openai", text: "Other provider (OpenAI-compatible)" }),
+  );
+  backend.value = settings.backend;
+  backend.addEventListener("change", () => {
+    settings.backend = backend.value as Settings["backend"];
+    void save();
+    show();
   });
 
   const model = h("select", {}) as HTMLSelectElement;
@@ -298,23 +340,40 @@ function apiSection(hasKey: boolean, hasCli: boolean): HTMLElement {
     settings.model = id;
     void save();
   });
+  const claudeModelRow = h("div", { class: "row" }, h("label", { text: "Model" }), model, customModel);
 
-  keyRow.append(h("label", { text: "API key" }), field, saveBtn, clearBtn);
-  clearBtn.style.display = hasKey ? "" : "none";
-  keyRow.style.display = settings.backend === "api" ? "" : "none";
+  /** Shows the rows the chosen backend uses, and its status. */
+  function show() {
+    const b = settings.backend;
+    anthropicKey.row.style.display = b === "api" ? "" : "none";
+    claudeModelRow.style.display = b === "openai" ? "none" : "";
+    for (const row of [baseUrl, customKey.row, customModelRow]) {
+      row.style.display = b === "openai" ? "" : "none";
+    }
+    const [ok, text] = status();
+    dot.style.background = ok ? "#22c55e" : "#f4505e";
+    state.textContent = text;
+    note.textContent = b === "openai"
+      ? "Works with anything that speaks the OpenAI chat API. OpenRouter: https://openrouter.ai/api/v1 · Gemini: https://generativelanguage.googleapis.com/v1beta/openai · Ollama: http://localhost:11434/v1. Chat only: no web search, and files are sent as text or images."
+      : "The newest models may need an up-to-date Claude Code (`claude update`), and some are not included in every plan.";
+  }
+
+  show();
+  void anthropicKey.refresh();
+  void customKey.refresh();
 
   return h(
     "section",
     {},
-    h("h2", {}, dot, h("span", { text: "Claude" })),
+    h("h2", {}, dot, h("span", { text: "Chat" })),
     state,
     h("div", { class: "row" }, h("label", { text: "Chat with" }), backend),
-    keyRow,
-    h("div", { class: "row" }, h("label", { text: "Model" }), model, customModel),
-    h("div", {
-      class: "hint",
-      text: "The newest models may need an up-to-date Claude Code (`claude update`), and some are not included in every plan.",
-    }),
+    anthropicKey.row,
+    baseUrl,
+    customKey.row,
+    claudeModelRow,
+    customModelRow,
+    note,
     feedback,
   );
 }
@@ -494,7 +553,6 @@ async function main() {
     installed: false, settingsPath: "", hookPath: "", hookReady: false,
   };
 
-  const hasKey = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
   const hasCli = (await Bridge.claudeCliPresent()) ?? false;
 
   const keys = [
@@ -508,7 +566,7 @@ async function main() {
   root.append(
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
     claudeSection(status),
-    apiSection(hasKey, hasCli),
+    apiSection(hasCli),
     integrationsSection(present),
     generalSection(),
     h("div", {

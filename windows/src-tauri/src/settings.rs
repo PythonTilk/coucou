@@ -20,10 +20,16 @@ pub struct Settings {
     /// Defaulted explicitly so a settings.json written by an older build still loads.
     #[serde(default = "default_model")]
     pub model: String,
-    /// What the chat talks to: "api" (Anthropic API key) or "cli" (Claude Code,
-    /// on its own sign-in).
+    /// What the chat talks to: "api" (Anthropic API key), "cli" (Claude Code,
+    /// on its own sign-in) or "openai" (any OpenAI-compatible endpoint).
     #[serde(default = "default_backend")]
     pub backend: String,
+    /// The "openai" backend's endpoint, e.g. `https://openrouter.ai/api/v1`.
+    #[serde(default)]
+    pub custom_base_url: String,
+    /// The model ID sent to that endpoint.
+    #[serde(default)]
+    pub custom_model: String,
 }
 
 fn default_backend() -> String {
@@ -52,6 +58,8 @@ impl Default for Settings {
             hooks_installed: false,
             model: default_model(),
             backend: default_backend(),
+            custom_base_url: String::new(),
+            custom_model: String::new(),
         }
     }
 }

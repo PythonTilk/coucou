@@ -41,12 +41,31 @@ pub struct Chat {
     messages: Mutex<Vec<Value>>,
     /// Claude Code keeps its own history; this is the session to resume.
     session: Mutex<Option<String>>,
+    /// The conversation with an OpenAI-compatible provider, in its own format.
+    other: Mutex<Vec<Value>>,
 }
 
 impl Chat {
     pub fn reset(&self) {
         self.messages.lock().unwrap().clear();
         *self.session.lock().unwrap() = None;
+        self.other.lock().unwrap().clear();
+    }
+
+    pub(crate) fn other_is_empty(&self) -> bool {
+        self.other.lock().unwrap().is_empty()
+    }
+
+    pub(crate) fn other_push(&self, message: Value) {
+        self.other.lock().unwrap().push(message);
+    }
+
+    pub(crate) fn other_pop(&self) {
+        self.other.lock().unwrap().pop();
+    }
+
+    pub(crate) fn other_snapshot(&self) -> Vec<Value> {
+        self.other.lock().unwrap().clone()
     }
 
     pub(crate) fn session(&self) -> Option<String> {

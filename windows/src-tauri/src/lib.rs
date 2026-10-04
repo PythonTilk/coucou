@@ -7,6 +7,7 @@ mod hooks;
 mod integrations;
 mod island;
 mod log;
+mod openai;
 mod pipe;
 mod platform;
 mod secrets;
@@ -270,11 +271,18 @@ async fn chat_send(
     query: String,
     context: Option<ChatContext>,
 ) -> Result<ChatReply, String> {
-    let (backend, model) = {
-        let settings = shared.settings.lock().unwrap();
-        (settings.backend.clone(), settings.model.clone())
-    };
-    claude::send(&chat, &backend, &model, query, context).await
+    let settings = shared.settings.lock().unwrap().clone();
+    if settings.backend == openai::BACKEND {
+        return openai::send(
+            &chat,
+            &settings.custom_base_url,
+            &settings.custom_model,
+            query,
+            context,
+        )
+        .await;
+    }
+    claude::send(&chat, &settings.backend, &settings.model, query, context).await
 }
 
 /// Whether the Claude Code backend has a `claude` to run.
