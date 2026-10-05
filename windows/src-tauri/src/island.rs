@@ -194,6 +194,14 @@ fn place(app: &AppHandle, pref: &str, lw: f64, lh: f64) {
     let _ = win.set_position(PhysicalPosition::new(x, y));
     // Moving across displays can rescale the window: re-assert the physical size.
     let _ = win.set_size(PhysicalSize::new(pw, ph));
+    // While a file is being carried, the picture of it under the pointer is a
+    // topmost window too. Raising the island now would put it over that picture
+    // and the file would seem to vanish behind the island: leave the order alone,
+    // and make sure the picture is the one on top.
+    if platform::shell_drag_in_progress() {
+        platform::raise_drag_image();
+        return;
+    }
     let _ = win.set_always_on_top(true);
     platform::raise_topmost(&win);
 }

@@ -254,24 +254,35 @@ pub fn moving_window() -> bool {
 /// Explorer or in an app that uses the shell's drag helper, which is how files
 /// are usually dragged. A text selection or a slider being dragged has none.
 pub fn shell_drag_in_progress() -> bool {
+    drag_image().is_some()
+}
+
+/// The window showing the picture of what is being dragged, if there is one.
+fn drag_image() -> Option<HWND> {
     use ::windows::core::{w, PCWSTR};
     use ::windows::Win32::UI::WindowsAndMessaging::FindWindowExW;
     // The picture is a top-level window of this class. A stale, hidden one can
     // linger between drags, so every one of them is checked.
     let mut after: Option<HWND> = None;
     for _ in 0..16 {
-        let Ok(hwnd) = (unsafe { FindWindowExW(None, after, w!("SysDragImage"), PCWSTR::null()) }) else {
-            return false;
-        };
+        let hwnd = unsafe { FindWindowExW(None, after, w!("SysDragImage"), PCWSTR::null()) }.ok()?;
         if hwnd.0.is_null() {
-            return false;
+            return None;
         }
         if unsafe { IsWindowVisible(hwnd) }.as_bool() {
-            return true;
+            return Some(hwnd);
         }
         after = Some(hwnd);
     }
-    false
+    None
+}
+
+/// Puts the drag picture back above the island, which is topmost as well and
+/// may have been raised over it.
+pub fn raise_drag_image() {
+    if let Some(hwnd) = drag_image() {
+        raise_hwnd(hwnd);
+    }
 }
 
 /// Puts the island back on top of the other always-on-top windows.
@@ -311,7 +322,10 @@ pub fn keep_topmost(app: &AppHandle) {
     let raw = hwnd.0 as isize; // HWND isn't Send; the handle itself is just a number
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(2));
-        raise_hwnd(HWND(raw as *mut _));
+        // Not over the picture of a file being carried: see `island::place`.
+        if !shell_drag_in_progress() {
+            raise_hwnd(HWND(raw as *mut _));
+        }
     });
 }
 

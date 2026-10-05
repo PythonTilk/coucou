@@ -217,6 +217,8 @@ pub fn shell_drag_in_progress() -> bool {
     false
 }
 
+pub fn raise_drag_image() {}
+
 /// Turns the island into an overlay surface on the top edge that never takes
 /// the keyboard. Must run before the window is first shown: a layer surface
 /// cannot be made out of a window the compositor already knows.

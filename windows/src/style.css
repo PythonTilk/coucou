@@ -1531,10 +1531,11 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* ── Drop menu ──────────────────────────────────────────────────────────── */
 
-/* Two halves, the chat and the shelf, with Mochi on the line between them. */
+/* Two halves, the chat and the shelf, with Mochi standing in the gap between
+   them. The gap is wider than he is, so neither dashed frame runs behind him. */
 .drop-view {
   display: flex;
-  gap: 10px;
+  gap: 68px;
 }
 
 .drop-half {
@@ -1554,15 +1555,6 @@ input[type="range"]::-webkit-slider-thumb {
   gap: 5px;
   color: #b9bdc4;
   text-align: center;
-}
-
-/* Clear of Mochi, who sits over the gap. */
-.drop-half[data-target="chat"] .drop-half-body {
-  padding-right: 22px;
-}
-
-.drop-half[data-target="shelf"] .drop-half-body {
-  padding-left: 22px;
 }
 
 .drop-sub {
