@@ -130,7 +130,8 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
         log.scrollTop = log.scrollHeight;
       }
 
-      input.placeholder = State.chatHistory.length === 0 ? "Ask me anything…" : "Continue…";
+      input.placeholder =
+        State.chatHistory.length === 0 ? "Ask me anything, or drop a file here…" : "Continue…";
       input.disabled = sending;
     },
     focus() {

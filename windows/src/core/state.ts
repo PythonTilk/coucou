@@ -36,11 +36,14 @@ export interface SessionHost {
   hwnd: number | null;
 }
 
-/** A file parked on the shelf. */
+/** Something parked on the shelf: a file, or a text that was pasted. */
 export interface ShelfItem {
   name: string;
   path: string;
   size: number;
+  kind: "file" | "text";
+  /** The start of a pasted text. */
+  preview: string | null;
 }
 
 export interface ApprovalInfo {
@@ -186,6 +189,8 @@ class AppState {
   shelf: ShelfItem[] = [];
   /** True while one of our own files is being dragged out of the island. */
   shelfDragging = false;
+  /** True while a file is held over the island with the shelf as its target. */
+  shelfDropOver = false;
   pendingApproval: ApprovalInfo | null = null;
 
   integrations: Record<string, IntegrationInfo> = {};

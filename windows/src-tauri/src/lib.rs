@@ -307,14 +307,20 @@ fn ingest_file(path: String) -> Result<DroppedFile, String> {
 // ── Shelf ─────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-fn shelf_list() -> Vec<DroppedFile> {
+fn shelf_list() -> Vec<shelf::ShelfEntry> {
     shelf::list()
 }
 
 /// Parks a copy of the file on the shelf.
 #[tauri::command]
-fn shelf_add(path: String) -> Result<DroppedFile, String> {
+fn shelf_add(path: String) -> Result<shelf::ShelfEntry, String> {
     shelf::add(&path)
+}
+
+/// Takes the clipboard — copied files, or text — onto the shelf.
+#[tauri::command]
+async fn shelf_paste() -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(shelf::paste).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -322,7 +328,7 @@ fn shelf_remove(path: String) -> Result<(), String> {
     shelf::remove(&path)
 }
 
-/// Puts the file on the clipboard, ready to paste anywhere.
+/// Puts the file or the pasted text back on the clipboard.
 #[tauri::command]
 async fn shelf_copy(path: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || shelf::copy_to_clipboard(&path))
@@ -479,6 +485,7 @@ pub fn run() {
             ingest_file,
             shelf_list,
             shelf_add,
+            shelf_paste,
             shelf_remove,
             shelf_copy,
             shelf_drag_icon,

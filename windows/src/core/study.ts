@@ -1,7 +1,7 @@
 // What can be done with a file once Mochi has swallowed it. The same list
 // draws the buttons on the drop card and decides what each one does.
 
-export type UploadChoice = "ask" | "summarise" | "explain" | "quiz" | "keep" | "cancel";
+export type UploadChoice = "ask" | "summarise" | "explain" | "quiz" | "cancel";
 
 /** In the order they are shown; the first is the primary button. `w` is its width on the card. */
 export const UPLOAD_CHOICES: { id: UploadChoice; label: string; w: number }[] = [
@@ -9,7 +9,6 @@ export const UPLOAD_CHOICES: { id: UploadChoice; label: string; w: number }[] = 
   { id: "summarise", label: "Summarise", w: 86 },
   { id: "explain", label: "Explain", w: 70 },
   { id: "quiz", label: "Quiz me", w: 74 },
-  { id: "keep", label: "Keep on shelf", w: 106 },
   { id: "cancel", label: "Cancel", w: 66 },
 ];
 

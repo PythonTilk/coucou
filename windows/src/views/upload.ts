@@ -2,7 +2,8 @@
 // ports of UploadView / UploadingView / ChooseView from IslandViewContent.swift.
 //
 // Sending a file by email is not in the Windows v1. `choose` offers asking about
-// the file, three study shortcuts, and parking it on the shelf.
+// the file and three study shortcuts. (The shelf takes files directly: drop one
+// while the shelf is open.)
 
 import { h, clear } from "./dom";
 import { State } from "../core/state";
@@ -10,7 +11,7 @@ import { UPLOAD_CHOICES } from "../core/study";
 import type { ViewActions, ViewHost } from "./views";
 
 /** Dashed rounded rect drawn as SVG so the dashes can march like on macOS. */
-function dashedFrame(): SVGSVGElement {
+export function dashedFrame(): SVGSVGElement {
   const ns = "http://www.w3.org/2000/svg";
   const el = document.createElementNS(ns, "svg");
   el.setAttribute("class", "drop-frame");

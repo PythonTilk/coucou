@@ -115,16 +115,6 @@ export class Island {
       this.setView(State.defaultView());
       return;
     }
-    if (id === "keep") {
-      if (file) {
-        void addToShelf(file.path).catch((err) => {
-          State.noteMessage = String(err).replace(/^Error:\s*/, "");
-          this.setView("note");
-        });
-      }
-      this.setView("shelf");
-      return;
-    }
     State.promptContext = file ? { kind: "file", name: file.name, path: file.path } : null;
     // "Ask" opens an empty chat; the study shortcuts ask their question at once.
     State.pendingPrompt = STUDY_PROMPTS[id] ?? null;
@@ -408,6 +398,12 @@ export class Island {
       case "over": {
         if (State.fileDragOver) return;
         State.fileDragOver = true;
+        // With the shelf open, that is where the file goes. Anywhere else it is
+        // for the chat — and hovering a tab on the way changes its mind.
+        if (State.mode === "expanded" && State.view === "shelf") {
+          this.aimDropAt("shelf");
+          break;
+        }
         this.engine.animateMorph(1);
         // enterZone must run before the island expands, so the sequence is
         // already active by the time the view becomes `upload`.
@@ -418,6 +414,11 @@ export class Island {
       case "leave": {
         if (!State.fileDragOver) return;
         State.fileDragOver = false;
+        if (State.shelfDropOver) {
+          State.shelfDropOver = false;
+          State.notify();
+          break;
+        }
         this.engine.animateMorph(0);
         // The island deliberately stays open: the drag session is still alive.
         UploadSeq.exitZone();
@@ -426,6 +427,11 @@ export class Island {
       }
       case "drop": {
         State.fileDragOver = false;
+        if (State.shelfDropOver) {
+          State.shelfDropOver = false;
+          this.dropOnShelf(e.paths ?? []);
+          break;
+        }
         const path = e.paths?.[0];
         if (!path) {
           this.engine.animateMorph(0);
@@ -436,6 +442,56 @@ export class Island {
         break;
       }
     }
+  }
+
+  /** Points the drag in progress at the shelf or at the chat. */
+  private aimDropAt(target: "shelf" | "chat") {
+    if (target === "shelf") {
+      if (State.shelfDropOver) return;
+      State.shelfDropOver = true;
+      this.engine.animateMorph(0);
+      this.alert("shelf"); // leaving the drop views ends their sequence
+    } else {
+      if (!State.shelfDropOver) return;
+      State.shelfDropOver = false;
+      this.engine.animateMorph(1);
+      UploadSeq.enterZone(State.mouseInIsland.x, State.mouseInIsland.y);
+      this.alert("upload");
+    }
+    Sound.play("blip");
+  }
+
+  /** While a file is held over the island, its tabs are targets too. */
+  private aimDropByTab(x: number, y: number) {
+    const over = (id: string) => {
+      const r = document.getElementById(id)?.getBoundingClientRect();
+      return r != null && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    };
+    if (over("tab-shelf")) this.aimDropAt("shelf");
+    else if (over("tab-chat")) this.aimDropAt("chat");
+  }
+
+  /** Everything dropped goes on the shelf, as many files as were held. */
+  private dropOnShelf(paths: string[]) {
+    if (paths.length === 0) {
+      State.notify();
+      return;
+    }
+    this.engine.gulp();
+    this.engine.triggerEmote("happy");
+    Sound.play("approve");
+    void (async () => {
+      for (const path of paths) {
+        try {
+          await addToShelf(path);
+        } catch (err) {
+          State.noteMessage = String(err).replace(/^Error:\s*/, "");
+          this.setView("note");
+          window.setTimeout(() => this.setView("shelf"), 2400);
+          return;
+        }
+      }
+    })();
   }
 
   /**
@@ -642,6 +698,8 @@ export class Island {
     if (UploadSeq.isActive && !UploadSeq.dropped) {
       UploadSeq.updateCursor(State.mouseInIsland.x, State.mouseInIsland.y);
     }
+
+    if (State.fileDragOver) this.aimDropByTab(x, y);
 
     const inIsland =
       x >= rect.x - HIT_MARGIN && x <= rect.x + rect.w + HIT_MARGIN &&

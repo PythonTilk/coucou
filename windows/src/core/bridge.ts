@@ -5,7 +5,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import type { SessionHost, Settings } from "./state";
+import type { SessionHost, Settings, ShelfItem } from "./state";
 
 export const IS_TAURI =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -102,11 +102,13 @@ export const Bridge = {
   /** Copies a dropped file into the inbox. */
   ingestFile: (path: string) => callOrThrow<DroppedFile>("ingest_file", { path }),
   // ── Shelf ─────────────────────────────────────────────────────────────────
-  shelfList: () => call<DroppedFile[]>("shelf_list"),
+  shelfList: () => call<ShelfItem[]>("shelf_list"),
   /** Parks a copy of the file on the shelf. */
-  shelfAdd: (path: string) => callOrThrow<DroppedFile>("shelf_add", { path }),
+  shelfAdd: (path: string) => callOrThrow<ShelfItem>("shelf_add", { path }),
+  /** Takes the clipboard — copied files, or text — onto the shelf. */
+  shelfPaste: () => callOrThrow<number>("shelf_paste"),
   shelfRemove: (path: string) => callOrThrow<void>("shelf_remove", { path }),
-  /** Puts the file on the clipboard, ready to paste. */
+  /** Puts the file, or the pasted text, back on the clipboard. */
   shelfCopy: (path: string) => callOrThrow<void>("shelf_copy", { path }),
   /** The image shown under the pointer while a file is dragged out. */
   shelfDragIcon: () => callOrThrow<string>("shelf_drag_icon"),

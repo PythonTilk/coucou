@@ -90,9 +90,8 @@ function stack(padLeft: number, padRight: number, ...children: Node[]): HTMLElem
 
 export function buildHeader(actions: ViewActions): ViewHost {
   const tabHome = h("button", { class: "tab", title: "Overview", onclick: () => go("overview") }, svg(ICONS.house, 13));
-  const tabChat = h("button", { class: "tab", title: "Ask", onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
-  const tabDrop = h("button", { class: "tab", title: "Drop", onclick: () => go("upload") }, svg(ICONS.plus, 13));
-  const tabShelf = h("button", { class: "tab", title: "Shelf", onclick: () => go("shelf") }, svg(ICONS.stack, 13));
+  const tabChat = h("button", { class: "tab", id: "tab-chat", title: "Ask", onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
+  const tabShelf = h("button", { class: "tab", id: "tab-shelf", title: "Shelf", onclick: () => go("shelf") }, svg(ICONS.stack, 13));
   const tabFocus = h("button", { class: "tab", title: "Focus timer", onclick: () => go("focus") }, svg(ICONS.timer, 13));
 
   const gearBtn = h("button", { title: "Settings", onclick: () => go("settings") }, svg(ICONS.gear, 14));
@@ -106,7 +105,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const el = h(
     "div",
     { id: "header" },
-    h("div", { class: "tabs" }, tabHome, tabChat, tabDrop, tabShelf, tabFocus),
+    h("div", { class: "tabs" }, tabHome, tabChat, tabShelf, tabFocus),
     h("div", { class: "header-actions" }, gearBtn, soundBtn),
   );
 
@@ -115,8 +114,8 @@ export function buildHeader(actions: ViewActions): ViewHost {
     sync() {
       const v = State.view;
       tabHome.classList.toggle("on", v === "overview" || v === "empty");
-      tabChat.classList.toggle("on", v === "prompt");
-      tabDrop.classList.toggle("on", v === "upload");
+      // Dropping a file is how a chat about it starts, so the drop views are the chat's.
+      tabChat.classList.toggle("on", v === "prompt" || v === "upload" || v === "uploading" || v === "choose");
       tabShelf.classList.toggle("on", v === "shelf");
       tabFocus.classList.toggle("on", v === "focus");
       gearBtn.classList.toggle("on", v === "settings");
