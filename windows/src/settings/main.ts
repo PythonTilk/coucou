@@ -408,8 +408,8 @@ const INTEGRATIONS: IntegrationDef[] = [
     fields: [{ key: "calcom-api-key", label: "API key", placeholder: "cal_…", secret: true }] },
   { id: "integration_calendar", name: "Calendar", color: "#38BDF8",
     fields: [{
-      key: "calendar-ics-url", label: "ICS link(s)",
-      placeholder: "https://…/timetable.ics — several: separate with spaces", secret: false,
+      key: "calendar-ics-url", label: "iCal subscription",
+      placeholder: "webcal:// or https:// link — several: separate with spaces", secret: false,
     }] },
 ];
 

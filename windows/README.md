@@ -64,8 +64,9 @@ Three things for studying, each with its own tab or pill.
   while it runs, Mochi tells you when a stretch or a break is over, and the
   minutes you studied today are counted, per subject if you name one.
 - **Calendar** — a pill with what is coming up in the next two weeks, from one
-  or more ICS links (a university timetable, a calendar's public link, a Moodle
-  export): **Settings… → Integrations → Calendar**. Ten minutes before
+  or more iCal subscription links — `webcal://` or `https://` (a university
+  timetable, a calendar's public link, a Moodle export): **Settings… →
+  Integrations → Calendar → iCal subscription**. Ten minutes before
   something starts, the island shows itself. Repeating lectures, cancelled
   weeks and all-day deadlines are understood; times are taken to be in this
   computer's time zone.
