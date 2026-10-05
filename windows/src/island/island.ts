@@ -3,9 +3,9 @@
 
 import { Focus, formatClock } from "../core/focus";
 import { STUDY_PROMPTS, type UploadChoice } from "../core/study";
-import { addToShelf } from "../views/shelf";
+import { refreshShelf } from "../views/shelf";
 import { Tracked, Spring, clamp } from "../core/anim";
-import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
+import { Bridge, IS_TAURI, ingestDropped, onDragDrop, onEvent, type DragDropPayload } from "../core/bridge";
 import {
   EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
@@ -14,7 +14,7 @@ import {
   type IslandMode, type IslandViewName,
 } from "../core/layout";
 import { Sound } from "../core/sound";
-import { State } from "../core/state";
+import { State, type DropTarget } from "../core/state";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
@@ -49,6 +49,10 @@ export class Island {
   private greetingCanvas!: HTMLCanvasElement;
   private miniGrid!: HTMLElement;
   private countdown!: HTMLElement;
+  /** The view to return to if a carried file is let go somewhere else. */
+  private dropReturn: IslandViewName | null = null;
+  /** The copy of the last dropped file into the inbox, while it is under way. */
+  private pendingIngest: Promise<void> | null = null;
   /** The focus timer's clock, shown in the compact island while it runs. */
   private focusChip!: HTMLElement;
   private wakeStrip!: HTMLElement;
@@ -110,15 +114,20 @@ export class Island {
 
   /** What to do with the file Mochi just swallowed. */
   private choose(id: UploadChoice) {
-    const file = State.droppedFile;
     if (id === "cancel") {
       this.setView(State.defaultView());
       return;
     }
-    State.promptContext = file ? { kind: "file", name: file.name, path: file.path } : null;
-    // "Ask" opens an empty chat; the study shortcuts ask their question at once.
-    State.pendingPrompt = STUDY_PROMPTS[id] ?? null;
-    this.setView("prompt");
+    // The file's copy may still be landing: the question waits for its path,
+    // or it would be asked about a file the chat cannot see.
+    void (this.pendingIngest ?? Promise.resolve()).then(() => {
+      const file = State.droppedFile;
+      if (!file) return; // the copy failed, and said so
+      State.promptContext = { kind: "file", name: file.name, path: file.path };
+      // "Ask" opens an empty chat; the study shortcuts ask their question at once.
+      State.pendingPrompt = STUDY_PROMPTS[id] ?? null;
+      this.setView("prompt");
+    });
   }
 
   /** A focus stretch or a break ran out: say so, whatever the island was doing. */
@@ -174,6 +183,7 @@ export class Island {
         if (url) void Bridge.openUrl(url);
       },
       choose: (id) => this.choose(id),
+      attachToChat: (file) => this.swallow(file),
       decide: (d) => {
         const req = State.pendingApproval;
         void Bridge.log(`decide ${d} req=${req?.requestId ?? "none"}`);
@@ -388,124 +398,132 @@ export class Island {
   }
 
   // ── File drop ───────────────────────────────────────────────────────────────
+  //
+  // A file in the air opens the drop menu: the chat on the left, the shelf on
+  // the right. It is shown only while something is being carried.
 
-  private onDragDrop(e: { type: string; paths?: string[] }) {
-    if (e.type !== "over") void Bridge.log(`drag ${e.type} ${e.paths?.length ?? 0} file(s)`);
-    // A file dragged off the shelf passes back over the island on its way out.
-    if (State.paused || State.shelfDragging) return;
+  /** Opens the drop menu. Called when a file is picked up, or reaches the island. */
+  openDropMenu() {
+    // A card waiting for an answer keeps the island; our own shelf drags are not drops.
+    if (State.paused || State.shelfDragging || State.isPinned) return;
+    if (State.mode === "expanded" && State.view === "drop") return;
+    // Where to go back to if the file is let go somewhere else.
+    this.dropReturn = State.mode === "expanded" ? State.view : null;
+    State.dropTarget = null;
+    this.alert("drop");
+  }
+
+  /** The file was let go somewhere else: put the island back as it was. */
+  private closeDropMenu() {
+    State.fileDragOver = false;
+    State.dropTarget = null;
+    this.engine.animateMorph(0);
+    if (State.view !== "drop") return;
+    if (this.dropReturn && this.dropReturn !== "drop") {
+      this.setView(this.dropReturn);
+    } else {
+      // The menu must not be what the island shows the next time it opens.
+      State.view = State.defaultView();
+      this.collapse();
+    }
+  }
+
+  private halfAt(x: number | undefined): DropTarget {
+    return (x ?? 0) < window.innerWidth / 2 ? "chat" : "shelf";
+  }
+
+  private onDragDrop(e: DragDropPayload) {
+    if (e.type !== "over") void Bridge.log(`drag ${e.type} ${e.files?.length ?? 0} file(s)`);
+    if (State.paused || State.shelfDragging || State.isPinned) return;
     switch (e.type) {
       case "enter":
       case "over": {
-        if (State.fileDragOver) return;
-        State.fileDragOver = true;
-        // With the shelf open, that is where the file goes. Anywhere else it is
-        // for the chat — and hovering a tab on the way changes its mind.
-        if (State.mode === "expanded" && State.view === "shelf") {
-          this.aimDropAt("shelf");
-          break;
+        if (!State.fileDragOver) {
+          State.fileDragOver = true;
+          this.engine.animateMorph(1);
+          this.openDropMenu();
         }
-        this.engine.animateMorph(1);
-        // enterZone must run before the island expands, so the sequence is
-        // already active by the time the view becomes `upload`.
-        UploadSeq.enterZone(State.mouseInIsland.x, State.mouseInIsland.y);
-        this.alert("upload");
+        const target = this.halfAt(e.x);
+        if (State.dropTarget !== target) {
+          State.dropTarget = target;
+          Sound.play("blip");
+          State.notify();
+        }
         break;
       }
       case "leave": {
-        if (!State.fileDragOver) return;
+        // The menu stays: the file is still in the air and may come back.
         State.fileDragOver = false;
-        if (State.shelfDropOver) {
-          State.shelfDropOver = false;
-          State.notify();
-          break;
-        }
+        State.dropTarget = null;
         this.engine.animateMorph(0);
-        // The island deliberately stays open: the drag session is still alive.
-        UploadSeq.exitZone();
         State.notify();
         break;
       }
       case "drop": {
         State.fileDragOver = false;
-        if (State.shelfDropOver) {
-          State.shelfDropOver = false;
-          this.dropOnShelf(e.paths ?? []);
-          break;
-        }
-        const path = e.paths?.[0];
-        if (!path) {
-          this.engine.animateMorph(0);
-          this.setView(State.defaultView());
+        const target = State.dropTarget ?? this.halfAt(e.x);
+        State.dropTarget = null;
+        const files = e.files ?? [];
+        if (files.length === 0) {
+          this.closeDropMenu();
           return;
         }
-        this.swallow(path);
+        if (target === "shelf") this.dropOnShelf(files);
+        else this.swallow(files[0]);
         break;
       }
     }
   }
 
-  /** Points the drag in progress at the shelf or at the chat. */
-  private aimDropAt(target: "shelf" | "chat") {
-    if (target === "shelf") {
-      if (State.shelfDropOver) return;
-      State.shelfDropOver = true;
-      this.engine.animateMorph(0);
-      this.alert("shelf"); // leaving the drop views ends their sequence
-    } else {
-      if (!State.shelfDropOver) return;
-      State.shelfDropOver = false;
-      this.engine.animateMorph(1);
-      UploadSeq.enterZone(State.mouseInIsland.x, State.mouseInIsland.y);
-      this.alert("upload");
-    }
-    Sound.play("blip");
+  /**
+   * The mouse button went up. If the drop menu is still showing, the file was
+   * let go somewhere else — or what was picked up never was a file.
+   */
+  private onPointerReleased() {
+    // A drop on the island reaches the page a moment before or after this.
+    window.setTimeout(() => {
+      if (State.view === "drop" && State.mode === "expanded") {
+        void Bridge.log("drag ended outside the island");
+        this.closeDropMenu();
+      }
+    }, 150);
   }
 
-  /** While a file is held over the island, its tabs are targets too. */
-  private aimDropByTab(x: number, y: number) {
-    const over = (id: string) => {
-      const r = document.getElementById(id)?.getBoundingClientRect();
-      return r != null && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-    };
-    if (over("tab-shelf")) this.aimDropAt("shelf");
-    else if (over("tab-chat")) this.aimDropAt("chat");
-  }
-
-  /** Everything dropped goes on the shelf, as many files as were held. */
-  private dropOnShelf(paths: string[]) {
-    if (paths.length === 0) {
-      State.notify();
-      return;
-    }
+  /** Everything dropped goes on the shelf, as many files as were carried. */
+  private dropOnShelf(files: File[]) {
+    this.engine.animateMorph(0);
     this.engine.gulp();
     this.engine.triggerEmote("happy");
     Sound.play("approve");
+    this.setView("shelf");
     void (async () => {
-      for (const path of paths) {
-        try {
-          await addToShelf(path);
-        } catch (err) {
-          State.noteMessage = String(err).replace(/^Error:\s*/, "");
-          this.setView("note");
-          window.setTimeout(() => this.setView("shelf"), 2400);
-          return;
-        }
+      try {
+        for (const file of files) await ingestDropped(file, "shelf");
+      } catch (err) {
+        State.noteMessage = String(err).replace(/^Error:\s*/, "");
+        this.setView("note");
+        window.setTimeout(() => this.setView("shelf"), 2400);
       }
+      await refreshShelf();
     })();
   }
 
   /**
-   * Mochi eats the file. Nothing here waits on the file system: the copy into
-   * the inbox runs in the background and swaps the path in when it lands, so a
-   * slow disk can never stall the animation — same as FileDropHandler on macOS.
+   * Mochi eats the file and offers what to do with it. Nothing here waits on
+   * the file system: the copy into the inbox runs in the background and fills
+   * the path in when it lands, so a slow disk can never stall the animation —
+   * same as FileDropHandler on macOS.
    */
-  private swallow(path: string) {
-    const name = path.split(/[\\/]/).pop() || "file";
-    State.droppedFile = { name, path };
-    State.promptContext = { kind: "file", name, path };
+  swallow(file: File) {
+    const name = file.name || "file";
+    // The path fills in when the copy lands, a moment later.
+    State.droppedFile = { name, path: "" };
+    State.promptContext = { kind: "file", name, path: "" };
     State.chatHistory = [];
     void Bridge.chatReset();
 
+    // The sequence starts where the file was let go.
+    UploadSeq.enterZone(State.mouseInIsland.x, State.mouseInIsland.y);
     UploadSeq.performDrop(State.uploadDuration);
     this.uploadTens = 0;
     this.uploadDone = false;
@@ -519,13 +537,14 @@ export class Island {
     this.setView("uploading");
     this.ensureRunning();
 
-    void Bridge.ingestFile(path)
-      .then((file) => {
-        State.droppedFile = { name: file.name, path: file.path };
-        State.promptContext = { kind: "file", name: file.name, path: file.path };
+    this.pendingIngest = ingestDropped(file, "inbox")
+      .then((landed) => {
+        State.droppedFile = { name: landed.name, path: landed.path };
+        State.promptContext = { kind: "file", name: landed.name, path: landed.path };
         State.notify();
       })
       .catch((err) => {
+        State.droppedFile = null;
         UploadSeq.deactivate();
         State.noteMessage = String(err).replace(/^Error:\s*/, "");
         this.engine.animateMorph(0);
@@ -667,7 +686,9 @@ export class Island {
       State.lastActivity = performance.now();
     });
 
-    void onDragDrop((e) => this.onDragDrop(e));
+    onDragDrop((e) => this.onDragDrop(e));
+    void onEvent<null>("file-drag-start", () => this.openDropMenu());
+    void onEvent<null>("pointer-released", () => this.onPointerReleased());
 
     // Outside Tauri (plain browser) drive the cursor from DOM events so the
     // island can be inspected with `npm run dev`.
@@ -698,8 +719,6 @@ export class Island {
     if (UploadSeq.isActive && !UploadSeq.dropped) {
       UploadSeq.updateCursor(State.mouseInIsland.x, State.mouseInIsland.y);
     }
-
-    if (State.fileDragOver) this.aimDropByTab(x, y);
 
     const inIsland =
       x >= rect.x - HIT_MARGIN && x <= rect.x + rect.w + HIT_MARGIN &&
@@ -835,6 +854,8 @@ export class Island {
     if (uploadActive) this.uploadCanvas.draw(UploadSeq.frame(), nowMs / 1000);
     this.uploadCanvas.el.classList.toggle("on", uploadActive);
     this.viewsEl.classList.toggle("hidden-by-upload", uploadActive);
+    // Lets the header stay clickable while #content passes clicks through.
+    this.contentEl.classList.toggle("upload-on", uploadActive);
 
     tickMiniBots(dt);
     this.views.get(State.view)?.tick?.(nowMs);
@@ -960,7 +981,9 @@ export class Island {
     const greetingActive = expanded && State.view === "greeting";
 
     this.contentEl.style.opacity = expanded && !greetingActive ? "1" : "0";
-    this.contentEl.style.pointerEvents = expanded && !greetingActive ? "auto" : "none";
+    // While the drop sequence owns the body, the content layer lets clicks through
+    // to the invisible hit areas under it (the header opts back in, see style.css).
+    this.contentEl.style.pointerEvents = expanded && !greetingActive && !this.uploadActive ? "auto" : "none";
     this.greetingCanvas.style.display = greetingActive ? "block" : "none";
 
     this.header.sync();

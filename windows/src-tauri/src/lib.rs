@@ -97,9 +97,10 @@ fn set_collapsed(app: AppHandle, shared: State<Shared>, collapsed: bool) {
     let pref = shared.settings.lock().unwrap().screen.clone();
     shared.gate.collapsed.store(collapsed, Ordering::Relaxed);
     island::apply_geometry(&app, &pref, collapsed);
+    // Stop the cursor poll first so no in-flight tick can undo what follows.
+    shared.gate.set_active(!collapsed);
     // The wake strip must always take the mouse, and a resize invalidates the flag.
     island::refresh_click_through(&app, &shared.gate);
-    shared.gate.set_active(!collapsed);
 }
 
 /// The front end pushes the island shape; Rust decides click-through from it.
@@ -304,6 +305,23 @@ fn ingest_file(path: String) -> Result<DroppedFile, String> {
     files::ingest(&path)
 }
 
+/// A file dropped or pasted on the island page. WebView2 hands the page the
+/// file's contents, not its path, so the bytes come over as the raw request
+/// body, the name (URI-encoded) in one header and where it is headed in another:
+/// the inbox for the chat, or the shelf.
+#[tauri::command]
+fn ingest_bytes(request: tauri::ipc::Request<'_>) -> Result<DroppedFile, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected the file's contents.".into());
+    };
+    let header = |name: &str| request.headers().get(name).and_then(|v| v.to_str().ok());
+    let name = header("x-file-name").map(files::percent_decode).unwrap_or_else(|| "file".into());
+    match header("x-drop-target") {
+        Some("shelf") => files::write_into(&shelf::dir(), &name, bytes),
+        _ => files::ingest_bytes(&name, bytes),
+    }
+}
+
 // ── Shelf ─────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -483,6 +501,7 @@ pub fn run() {
             chat_reset,
             claude_cli_present,
             ingest_file,
+            ingest_bytes,
             shelf_list,
             shelf_add,
             shelf_paste,
@@ -500,6 +519,7 @@ pub fn run() {
         .setup(move |app| {
             let handle = app.handle().clone();
             tray::build(&handle)?;
+            platform::keep_topmost(&handle);
             // Before the island: see create_settings_window.
             create_settings_window(&handle);
 
@@ -516,6 +536,7 @@ pub fn run() {
             }
             gate.set_active(true);
             island::spawn_cursor_poll(handle.clone(), gate.clone());
+            island::spawn_drag_watch(handle.clone(), gate.clone());
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             hooks::ensure_hook_exe(&handle);

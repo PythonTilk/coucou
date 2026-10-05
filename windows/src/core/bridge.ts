@@ -4,7 +4,6 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { SessionHost, Settings, ShelfItem } from "./state";
 
 export const IS_TAURI =
@@ -173,14 +172,81 @@ export type BridgeEvent =
 
 export interface DragDropPayload {
   type: "enter" | "over" | "drop" | "leave";
-  paths?: string[];
+  /** Where the pointer is, in page coordinates (over and drop). */
+  x?: number;
+  y?: number;
+  /** On drop: what was carried. */
+  files?: File[];
 }
 
-/** Files dragged onto the island. Only reaches us when the window takes the mouse. */
-export async function onDragDrop(handler: (e: DragDropPayload) => void) {
-  if (!IS_TAURI) return () => {};
-  return getCurrentWebview().onDragDropEvent((event) => {
-    handler(event.payload as DragDropPayload);
+/** Bigger than this and the bytes are not worth pushing through the IPC. */
+const MAX_DROP_BYTES = 200 * 1024 * 1024;
+
+/**
+ * Files dragged onto the island, as a plain HTML5 drag and drop.
+ *
+ * Tauri's native drop hook (dragDropEnabled) never fires on Windows here: its
+ * target sits on a window above the ones WebView2's own process owns, and OLE
+ * stops at those first. WebView2 itself delivers the drop to the page without
+ * fuss, but hands over the file's contents, not its path — so the contents go
+ * to Rust, which writes them where they belong. (Approach from #114.)
+ */
+export function onDragDrop(handler: (e: DragDropPayload) => void) {
+  const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
+  // dragenter/dragleave fire for every element crossed; count to know when
+  // the drag really enters and leaves the page.
+  let depth = 0;
+
+  const enter = (e: DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    if (depth++ === 0) handler({ type: "enter", x: e.clientX, y: e.clientY });
+  };
+  const over = (e: DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); // without this the page refuses the drop
+    e.dataTransfer!.dropEffect = "copy";
+    handler({ type: "over", x: e.clientX, y: e.clientY });
+  };
+  const leave = (e: DragEvent) => {
+    if (!hasFiles(e) || depth === 0) return;
+    if (--depth === 0) handler({ type: "leave" });
+  };
+  const drop = (e: DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth = 0;
+    handler({ type: "drop", x: e.clientX, y: e.clientY, files: [...e.dataTransfer!.files] });
+  };
+
+  window.addEventListener("dragenter", enter);
+  window.addEventListener("dragover", over);
+  window.addEventListener("dragleave", leave);
+  window.addEventListener("drop", drop);
+  return () => {
+    window.removeEventListener("dragenter", enter);
+    window.removeEventListener("dragover", over);
+    window.removeEventListener("dragleave", leave);
+    window.removeEventListener("drop", drop);
+  };
+}
+
+/**
+ * Hands a dropped or pasted file to Rust by its contents: into the inbox for
+ * the chat, or onto the shelf.
+ */
+export async function ingestDropped(file: File, target: "inbox" | "shelf"): Promise<DroppedFile> {
+  if (!IS_TAURI) throw new Error("not running inside Coucou");
+  if (file.size > MAX_DROP_BYTES) throw new Error("That file is too big to drop (200 MB max).");
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await file.arrayBuffer();
+  } catch {
+    // A folder arrives as a File that cannot be read.
+    throw new Error("Folders can't be dropped yet.");
+  }
+  return invoke<DroppedFile>("ingest_bytes", bytes, {
+    headers: { "x-file-name": encodeURIComponent(file.name || "file"), "x-drop-target": target },
   });
 }
 

@@ -36,6 +36,9 @@ export interface SessionHost {
   hwnd: number | null;
 }
 
+/** Where a carried file is headed: the two halves of the drop menu. */
+export type DropTarget = "chat" | "shelf";
+
 /** Something parked on the shelf: a file, or a text that was pasted. */
 export interface ShelfItem {
   name: string;
@@ -189,8 +192,8 @@ class AppState {
   shelf: ShelfItem[] = [];
   /** True while one of our own files is being dragged out of the island. */
   shelfDragging = false;
-  /** True while a file is held over the island with the shelf as its target. */
-  shelfDropOver = false;
+  /** The half of the drop menu a carried file is over, if any. */
+  dropTarget: DropTarget | null = null;
   pendingApproval: ApprovalInfo | null = null;
 
   integrations: Record<string, IntegrationInfo> = {};

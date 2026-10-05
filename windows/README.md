@@ -43,8 +43,10 @@ installs for the current user only — no admin prompt.
 | Click the small island | It opens |
 | Click Mochi | It gets annoyed. Three times in a row and it goes dizzy |
 | Rest the pointer on Mochi for two seconds | Hearts |
-| Drag a file onto the island | Mochi turns into a box, swallows it, then offers what to do with it: ask about it, **Summarise**, **Explain** or **Quiz me** |
-| Drag a file onto the island while the **Shelf** is open | It goes on the shelf instead. Hovering the Shelf or Ask tab on the way changes where it is headed |
+| Pick up a file | The island opens its drop menu: the chat on the left, the shelf on the right |
+| Let it go on the chat half | Mochi swallows it, then offers what to do with it: ask about it, **Summarise**, **Explain** or **Quiz me** |
+| Let it go on the shelf half | It is kept on the shelf — as many files as you were carrying |
+| Paste into the chat field | Text goes in as text; a copied file or a screenshot is taken like a dropped one |
 | `Esc` | Closes the island |
 | Click anywhere else | Folds the open island (a card waiting for an answer stays up) |
 | Tray icon | Open, Settings…, Pause, Quit |
@@ -57,8 +59,9 @@ your integrations sit in the coloured pills next to Mochi.
 
 Three things for studying, each with its own tab or pill.
 
-- **Shelf** — a place to park files and bits of text. Drop a file on it, or
-  press **Paste** to take what is on the clipboard (copied files, or text).
+- **Shelf** — a place to park files and bits of text. Carry a file to the shelf
+  half of the drop menu, or press **Paste** to take what is on the clipboard
+  (copied files, or text).
   Later, drag a thing back out to wherever it is needed, or click it to put it
   on the clipboard again. The × takes it off. Files on the shelf stay until you
   remove them (`%LOCALAPPDATA%\Coucou\shelf`).

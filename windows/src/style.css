@@ -133,6 +133,17 @@ body {
   transition: opacity 0.22s ease-in-out;
 }
 
+/* The invisible views must not swallow the clicks meant for the buttons the
+   canvas paints (.upload-hit sits below #content). */
+#views.hidden-by-upload * {
+  pointer-events: none;
+}
+
+/* #content itself is switched to pointer-events: none from island.ts (inline). */
+#content.upload-on #header {
+  pointer-events: auto;
+}
+
 #bot-glow {
   position: absolute;
   pointer-events: none;
@@ -1447,31 +1458,6 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* ── Shelf ──────────────────────────────────────────────────────────────── */
 
-/* The shelf doubles as a drop zone: the dashed frame of the drop card shows
-   only while a file is held over it. */
-.shelf-card .drop-frame {
-  opacity: 0;
-}
-
-.shelf-card.dropping {
-  background: radial-gradient(200px 200px at 50% 100%, rgba(34, 197, 94, 0.13), transparent 70%),
-    var(--card-flat);
-  border-color: transparent;
-}
-
-.shelf-card.dropping .drop-frame {
-  opacity: 1;
-}
-
-.shelf-card.dropping .drop-frame rect {
-  stroke: rgba(34, 197, 94, 0.65);
-  animation: dash-march 1.1s linear infinite;
-}
-
-.shelf-card.dropping .sub {
-  color: var(--green-2);
-}
-
 .shelf-head {
   display: flex;
   align-items: baseline;
@@ -1556,4 +1542,49 @@ input[type="range"]::-webkit-slider-thumb {
 .shelf-remove:hover {
   background: rgba(244, 80, 94, 0.45);
   color: #fff;
+}
+
+/* ── Drop menu ──────────────────────────────────────────────────────────── */
+
+/* Two halves, the chat and the shelf, with Mochi on the line between them. */
+.drop-view {
+  display: flex;
+  gap: 10px;
+}
+
+.drop-half {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+}
+
+.drop-half-body {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: #b9bdc4;
+  text-align: center;
+}
+
+/* Clear of Mochi, who sits over the gap. */
+.drop-half[data-target="chat"] .drop-half-body {
+  padding-right: 22px;
+}
+
+.drop-half[data-target="shelf"] .drop-half-body {
+  padding-left: 22px;
+}
+
+.drop-sub {
+  font: 400 11.5px var(--font);
+  color: var(--dim-2);
+}
+
+.drop-half.over .drop-half-body {
+  color: var(--green-2);
 }

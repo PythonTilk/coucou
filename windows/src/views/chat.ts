@@ -7,7 +7,7 @@ import { Bridge, type ChatContext } from "../core/bridge";
 import { Sound } from "../core/sound";
 import { State, type ChatMessage } from "../core/state";
 import type { PresetPrompt } from "../core/study";
-import type { ViewHost } from "./views";
+import type { ViewActions, ViewHost } from "./views";
 
 let nextId = 1;
 
@@ -37,7 +37,7 @@ function contextChip(label: string): HTMLElement {
   return chip;
 }
 
-export function buildPrompt(onHeightChange: () => void): ViewHost {
+export function buildPrompt(onHeightChange: () => void, actions: ViewActions): ViewHost {
   const chipRow = h("div", { class: "chip-row" });
   const log = h("div", { class: "chat-log" });
   const input = h("input", {
@@ -94,6 +94,15 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
     }
   }
 
+  // Text pastes into the field as usual. A pasted file — copied in Explorer, or
+  // a screenshot — is taken like a file dropped on the chat.
+  input.addEventListener("paste", (e) => {
+    const file = (e as ClipboardEvent).clipboardData?.files?.[0];
+    if (!file) return;
+    e.preventDefault();
+    actions.attachToChat(file);
+  });
+
   send.addEventListener("click", () => void submit());
   input.addEventListener("keydown", (e) => {
     if ((e as KeyboardEvent).key === "Enter") {
@@ -131,7 +140,7 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
       }
 
       input.placeholder =
-        State.chatHistory.length === 0 ? "Ask me anything, or drop a file here…" : "Continue…";
+        State.chatHistory.length === 0 ? "Ask me anything, or paste a file…" : "Continue…";
       input.disabled = sending;
     },
     focus() {

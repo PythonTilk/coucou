@@ -1,14 +1,13 @@
 // The shelf: files and bits of text parked on the island.
 //
-// Things arrive by dropping a file while the shelf is open, or by pasting what
-// is on the clipboard. They leave by being dragged back out, or with a click,
+// Things arrive by dropping a file on the shelf half of the drop menu, or by
+// pasting what is on the clipboard. They leave by being dragged back out, or with a click,
 // which puts them on the clipboard again; the × takes them off for good.
 
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
 
 import { h, svg, clear } from "./dom";
 import { ICONS } from "./icons";
-import { dashedFrame } from "./upload";
 import { Bridge, IS_TAURI } from "../core/bridge";
 import { State, type ShelfItem } from "../core/state";
 import type { ViewActions, ViewHost } from "./views";
@@ -51,17 +50,15 @@ export function buildShelf(actions: ViewActions): ViewHost {
   const paste = h("button", { class: "link-btn shelf-paste", text: "Paste", title: "Put what is on the clipboard on the shelf" });
   const note = h("div", { class: "sub" });
   const items = h("div", { class: "shelf-items" });
-  const card = h(
+  const body = h(
     "div",
-    { class: "card shelf-card" },
-    dashedFrame(),
+    { class: "card" },
     h("div", { class: "stack shelf-body" }, h("div", { class: "shelf-head" }, title, paste), note, items),
   );
-  const el = h("div", { class: "view" }, card);
+  const el = h("div", { class: "view" }, body);
 
   const HINT = "Drag one out, or click it to copy it.";
-  const EMPTY = "Nothing here yet. Drop a file here, or paste what you copied.";
-  const DROPPING = "Let go to keep it on the shelf.";
+  const EMPTY = "Nothing here yet. Carry a file up here, or paste what you copied.";
   let message: string | null = null;
   let messageTimer: number | null = null;
   let renderedKey = "";
@@ -154,9 +151,7 @@ export function buildShelf(actions: ViewActions): ViewHost {
   return {
     el,
     sync() {
-      const dropping = State.shelfDropOver;
-      card.classList.toggle("dropping", dropping);
-      note.textContent = dropping ? DROPPING : (message ?? (State.shelf.length === 0 ? EMPTY : HINT));
+      note.textContent = message ?? (State.shelf.length === 0 ? EMPTY : HINT);
       // Rebuilt only when the shelf changes, so a press in progress keeps its chip.
       const key = State.shelf.map((i) => `${i.path}:${i.preview ?? ""}`).join("|");
       if (key === renderedKey) return;

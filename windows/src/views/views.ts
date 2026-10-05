@@ -11,6 +11,7 @@ import { createMiniBot, pruneMiniBots } from "../mochi/minibots";
 import { buildPrompt } from "./chat";
 import { buildChoose, buildUpload, buildUploading } from "./upload";
 import { renderIntegrationCard, type IntegrationCardHooks } from "./integrations";
+import { buildDrop } from "./drop";
 import { buildFocus } from "./focus";
 import { buildShelf } from "./shelf";
 import type { UploadChoice } from "../core/study";
@@ -25,6 +26,8 @@ export interface ViewActions {
   openUrl(url: string): void;
   /** A button on the drop card: ask, a study shortcut, the shelf, or cancel. */
   choose(id: UploadChoice): void;
+  /** A file pasted into the chat: treated like one dropped on it. */
+  attachToChat(file: File): void;
   decide(d: "allow" | "deny"): void;
   /** Answers the question Claude Code asked: question text → chosen label. */
   answer(answers: Record<string, string>): void;
@@ -114,8 +117,8 @@ export function buildHeader(actions: ViewActions): ViewHost {
     sync() {
       const v = State.view;
       tabHome.classList.toggle("on", v === "overview" || v === "empty");
-      // Dropping a file is how a chat about it starts, so the drop views are the chat's.
-      tabChat.classList.toggle("on", v === "prompt" || v === "upload" || v === "uploading" || v === "choose");
+      // What follows a file landing on the chat half still belongs to the chat.
+      tabChat.classList.toggle("on", v === "prompt" || v === "uploading" || v === "choose");
       tabShelf.classList.toggle("on", v === "shelf");
       tabFocus.classList.toggle("on", v === "focus");
       gearBtn.classList.toggle("on", v === "settings");
@@ -589,7 +592,8 @@ export function buildViews(
   map.set("confused", buildConfused());
   map.set("note", buildNote());
   map.set("settings", buildSettings(actions));
-  map.set("prompt", buildPrompt(onChatHeightChange));
+  map.set("prompt", buildPrompt(onChatHeightChange, actions));
+  map.set("drop", buildDrop());
   map.set("upload", buildUpload());
   map.set("uploading", buildUploading());
   map.set("choose", buildChoose(actions));

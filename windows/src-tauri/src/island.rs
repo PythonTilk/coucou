@@ -21,6 +21,12 @@ pub const PANEL_H: f64 = 320.0;
 pub const STRIP_W: f64 = 240.0;
 pub const STRIP_H: f64 = 6.0;
 
+/// Logical height the wake strip grows to while something is being dragged, so
+/// a file only has to reach the top-centre of the screen, not a 6 px line.
+const DROP_ZONE_H: f64 = 150.0;
+/// How far the pointer travels with the button held before it counts as a drag.
+const DRAG_DISTANCE: f64 = 8.0;
+
 pub const WINDOW_LABEL: &str = "island";
 
 /// Margin around the island that still counts as "on the island", in logical px.
@@ -159,6 +165,12 @@ pub fn screen_info(app: &AppHandle, pref: &str) -> ScreenInfo {
 
 /// Places and sizes the window. `collapsed` picks the wake strip instead of the panel.
 pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
+    let (lw, lh) = if collapsed { (STRIP_W, STRIP_H) } else { (PANEL_W, PANEL_H) };
+    place(app, pref, lw, lh);
+}
+
+/// Centres a `lw` × `lh` logical window on the top edge of the island's monitor.
+fn place(app: &AppHandle, pref: &str, lw: f64, lh: f64) {
     let Some(win) = window(app) else { return };
     let Some(m) = target_monitor(app, pref) else { return };
 
@@ -166,7 +178,6 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     let mp = *m.position();
     let ms = *m.size();
 
-    let (lw, lh) = if collapsed { (STRIP_W, STRIP_H) } else { (PANEL_W, PANEL_H) };
     let pw = (lw * scale).round().max(1.0) as u32;
     let ph = (lh * scale).round().max(1.0) as u32;
     let x = mp.x + (ms.width as i32 - pw as i32) / 2;
@@ -184,6 +195,100 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     // Moving across displays can rescale the window: re-assert the physical size.
     let _ = win.set_size(PhysicalSize::new(pw, ph));
     let _ = win.set_always_on_top(true);
+    platform::raise_topmost(&win);
+}
+
+/// Watches for a drag in flight, whatever the island is doing.
+///
+/// Two things come of it (the approach, and most of this function, are from
+/// Louis-CFM/coucou#114):
+///
+/// * While the island is hidden its window is a 6 px strip nobody could drop a
+///   file on. For the length of a drag it becomes an invisible zone as wide as
+///   the panel; a file entering it wakes the island.
+/// * When the drag is one the shell is drawing a picture for — a file picked up
+///   in Explorer, say — the island is told at once, so it can open its drop
+///   menu before the file gets anywhere near it.
+///
+/// A drag here means: the button is held, the press began outside the zone, the
+/// pointer has moved, and no window is being moved or resized. Plain clicks are
+/// never affected. One GetAsyncKeyState every 50 ms.
+pub fn spawn_drag_watch(app: AppHandle, gate: Arc<PollGate>) {
+    if !platform::CURSOR_POLL {
+        return; // Linux: no global button state to watch.
+    }
+    std::thread::spawn(move || {
+        let mut zone_up = false;
+        let mut was_down = false;
+        let mut announced = false;
+        // Set when the press began outside the zone: only such a press can be a
+        // drag *into* it. A click inside the zone must never have the zone pop
+        // up under it, or the button release would land on us and be lost.
+        let mut armed_at: Option<(f64, f64)> = None;
+        loop {
+            std::thread::sleep(Duration::from_millis(50));
+            let down = left_button_down();
+            if !down && !was_down {
+                continue; // the common case: nothing held, nothing to do
+            }
+            let collapsed = gate.collapsed.load(Ordering::Relaxed);
+            let pref = app
+                .try_state::<crate::Shared>()
+                .map(|s| s.settings.lock().unwrap().screen.clone())
+                .unwrap_or_else(|| "primary".into());
+
+            if down && !was_down {
+                announced = false;
+                armed_at = cursor_physical().filter(|&(x, y)| {
+                    !drop_zone_rect(&app, &pref)
+                        .is_some_and(|(l, t, r, b)| x >= l && x < r && y >= t && y < b)
+                });
+            }
+
+            if down {
+                let moved = match (armed_at, cursor_physical()) {
+                    (Some((ax, ay)), Some((cx, cy))) => (cx - ax).hypot(cy - ay) >= DRAG_DISTANCE,
+                    _ => false,
+                };
+                if moved && !platform::moving_window() {
+                    if !announced && platform::shell_drag_in_progress() {
+                        announced = true;
+                        let _ = app.emit_to(WINDOW_LABEL, "file-drag-start", ());
+                    }
+                    if collapsed && !zone_up {
+                        place(&app, &pref, PANEL_W, DROP_ZONE_H);
+                        zone_up = true;
+                    }
+                }
+                if !collapsed {
+                    zone_up = false; // the island took over
+                }
+            } else {
+                // HTML5 says when a drag leaves the page, never that it then
+                // ended somewhere else: the page is told the button went up.
+                let _ = app.emit_to(WINDOW_LABEL, "pointer-released", ());
+                // Released without the file entering: back to the strip, unless
+                // the island opened in the meantime.
+                if zone_up && gate.collapsed.load(Ordering::Relaxed) {
+                    apply_geometry(&app, &pref, true);
+                }
+                zone_up = false;
+                armed_at = None;
+                announced = false;
+            }
+            was_down = down;
+        }
+    });
+}
+
+/// The drop zone in physical screen pixels: (left, top, right, bottom).
+fn drop_zone_rect(app: &AppHandle, pref: &str) -> Option<(f64, f64, f64, f64)> {
+    let m = target_monitor(app, pref)?;
+    let scale = m.scale_factor();
+    let (mp, ms) = (*m.position(), *m.size());
+    let w = PANEL_W * scale;
+    let left = mp.x as f64 + (ms.width as f64 - w) / 2.0;
+    Some((left, mp.y as f64, left + w, mp.y as f64 + DROP_ZONE_H * scale))
 }
 
 /// Position, size and scale of the monitor the island lives on. Any change here
@@ -257,16 +362,10 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                 let pressed = down && !was_down;
                 was_down = down;
                 let r = *gate.rect.lock().unwrap();
-                if pressed {
-                    // A press may be the start of a drag: make sure the drop target
-                    // is ours before the file arrives.
-                    let handle = app.clone();
-                    let _ = app.run_on_main_thread(move || platform::unblock_webview_drops(&handle));
-                    // Clicking anywhere else folds the island. The page decides
-                    // whether it may: a card waiting for an answer stays up.
-                    if outside_press(r, x, y) {
-                        let _ = win.emit("outside-click", ());
-                    }
+                // Clicking anywhere else folds the island. The page decides whether
+                // it may: a card waiting for an answer stays up.
+                if pressed && outside_press(r, x, y) {
+                    let _ = win.emit("outside-click", ());
                 }
 
                 if (x - last.0).abs() < 1.0 && (y - last.1).abs() < 1.0 {

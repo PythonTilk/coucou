@@ -75,6 +75,65 @@ pub fn copy_into(dir: &Path, source: &str) -> Result<DroppedFile, String> {
     })
 }
 
+/// A file handed over by its contents rather than its path — what WebView2 gives
+/// the page for a browser drag and drop, or a paste. Written into `dir` under
+/// its own name, never over a file that is already there.
+pub fn write_into(dir: &Path, name: &str, bytes: &[u8]) -> Result<DroppedFile, String> {
+    // Only the last component: a name must never steer the write elsewhere.
+    let name = Path::new(name)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "file".into());
+
+    crate::platform::ensure_private_dir(&settings::local_dir()).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+
+    let as_path = Path::new(&name);
+    let mut dest = dir.join(&name);
+    if dest.exists() {
+        let stem = as_path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let ext = as_path.extension().map(|s| format!(".{}", s.to_string_lossy())).unwrap_or_default();
+        if let Some(free) = (2..1000).map(|i| dir.join(format!("{stem} ({i}){ext}"))).find(|c| !c.exists()) {
+            dest = free;
+        }
+    }
+    std::fs::write(&dest, bytes).map_err(|e| format!("cannot save: {e}"))?;
+
+    Ok(DroppedFile {
+        name,
+        path: dest.to_string_lossy().to_string(),
+        size: bytes.len() as u64,
+    })
+}
+
+/// Like `write_into`, for the inbox: the week-long sweep runs as on any drop.
+pub fn ingest_bytes(name: &str, bytes: &[u8]) -> Result<DroppedFile, String> {
+    let dir = inbox_dir();
+    let file = write_into(&dir, name, bytes)?;
+    sweep(&dir);
+    Ok(file)
+}
+
+/// Decodes the `encodeURIComponent` file name the page sends in a header.
+pub fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(b) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(b);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// Drops anything copied here more than a week ago. `ingest` stamps every copy
 /// with the time it landed, so this really is the age of the copy and not the
 /// age of whatever the user happened to drag in.
@@ -93,6 +152,24 @@ fn sweep(dir: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_name_from_the_page_is_decoded_and_cannot_leave_the_folder() {
+        assert_eq!(percent_decode("Skript%20%C3%9Cbung%203.pdf"), "Skript Übung 3.pdf");
+        assert_eq!(percent_decode("100%25.txt"), "100%.txt");
+        assert_eq!(percent_decode("odd%zz%2"), "odd%zz%2");
+
+        let tmp = std::env::temp_dir().join(format!("coucou-bytes-{}", std::process::id()));
+        let first = write_into(&tmp, "..\\..\\evil.txt", b"one").unwrap();
+        assert_eq!(first.name, "evil.txt");
+        assert_eq!(Path::new(&first.path).parent(), Some(tmp.as_path()));
+        // Same name again: kept apart, never overwritten.
+        let second = write_into(&tmp, "evil.txt", b"two").unwrap();
+        assert_ne!(first.path, second.path);
+        assert_eq!(std::fs::read(&first.path).unwrap(), b"one");
+        assert_eq!(std::fs::read(&second.path).unwrap(), b"two");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn ingest_copies_and_never_overwrites() {
