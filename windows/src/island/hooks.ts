@@ -167,6 +167,7 @@ function clearSession() {
   if (!t) return;
   t.steps = [];
   t.stepIndex = 0;
+  delete t.stepSeq;
   t.name = "Claude Code";
   t.pillBadge = null;
   t.sessionHost = null;

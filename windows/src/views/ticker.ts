@@ -36,9 +36,12 @@ function makeRow(): Row {
   check.style.position = "absolute";
   chevron.style.position = "absolute";
   const shimmer = h("span", { class: "tick-text shimmer" });
+  // `top` is spelled out: left to its static position, this copy dropped to the
+  // next line whenever the text was wider than the row — a long command — and
+  // was drawn over the row below once it became the completed one.
   const dim = h("span", {
     class: "tick-text",
-    style: "position:absolute;left:0;right:0;color:#6b7079",
+    style: "position:absolute;left:0;right:0;top:0;color:#6b7079",
   });
   const el = h(
     "div",
@@ -96,31 +99,27 @@ export class Ticker {
   }
 
   sync(task: AgentTask | null) {
-    const steps = task && task.steps.length > 0 ? task.steps : ["…"];
-    const idx = task ? Math.min(task.stepIndex, steps.length - 1) : -1;
+    const steps = task?.steps ?? [];
+    // Where the newest step sits in the whole session, not in `steps`: that
+    // list is capped, and counting inside it made the ticker stop for good at
+    // the twentieth step of a session.
+    const newest = steps.length === 0 ? -1 : (task?.stepSeq ?? steps.length - 1);
 
-    // First render: drop straight into place, no animation.
-    if (this.displayIndex < 0) {
-      this.displayIndex = idx;
-      setText(this.a, idx > 0 ? steps[idx - 1] : "…");
-      setText(this.b, steps[Math.max(idx, 0)]);
-      this.rest();
-      return;
-    }
-
-    // The session restarted (steps were cleared): re-seed rather than scroll.
-    if (idx < this.displayIndex) {
+    // First render, or the session restarted (steps were cleared): drop
+    // straight into place rather than scroll.
+    if (this.displayIndex < 0 || newest < this.displayIndex) {
       this.queue = [];
       this.startMs = null;
-      this.displayIndex = idx;
-      setText(this.a, idx > 0 ? steps[idx - 1] : "…");
-      setText(this.b, steps[Math.max(idx, 0)]);
+      this.displayIndex = newest;
+      setText(this.a, steps.at(-2) ?? "…");
+      setText(this.b, steps.at(-1) ?? "…");
       this.rest();
       return;
     }
 
-    for (let i = this.displayIndex + 1; i <= idx; i++) this.queue.push(steps[i]);
-    this.displayIndex = idx;
+    const fresh = Math.min(newest - this.displayIndex, steps.length);
+    if (fresh > 0) this.queue.push(...steps.slice(-fresh));
+    this.displayIndex = newest;
     if (this.queue.length > MAX_QUEUE) {
       this.queue = this.queue.slice(-MAX_QUEUE);
     }
