@@ -60,8 +60,8 @@ your integrations sit in the coloured pills next to Mochi.
 Three things for studying, each with its own tab or pill.
 
 - **Shelf** — a place to park files and bits of text. Carry a file to the shelf
-  half of the drop menu, or press **Paste** to take what is on the clipboard
-  (copied files, or text).
+  half of the drop menu, or click the shelf and press **Ctrl+V** to take what
+  is on the clipboard (copied files, or text).
   Later, drag a thing back out to wherever it is needed, or click it to put it
   on the clipboard again. The × takes it off. Files on the shelf stay until you
   remove them (`%LOCALAPPDATA%\Coucou\shelf`).

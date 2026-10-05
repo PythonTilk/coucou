@@ -1458,21 +1458,6 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* ── Shelf ──────────────────────────────────────────────────────────────── */
 
-.shelf-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.shelf-paste {
-  color: #8e939c;
-  padding: 0;
-}
-
-.shelf-paste:hover {
-  color: var(--ink);
-}
-
 .shelf-item.text {
   font-style: italic;
 }

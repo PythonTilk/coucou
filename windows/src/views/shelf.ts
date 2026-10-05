@@ -1,7 +1,7 @@
 // The shelf: files and bits of text parked on the island.
 //
-// Things arrive by dropping a file on the shelf half of the drop menu, or by
-// pasting what is on the clipboard. They leave by being dragged back out, or with a click,
+// Things arrive by dropping a file on the shelf half of the drop menu, or with
+// Ctrl+V, which takes what is on the clipboard. They leave by being dragged back out, or with a click,
 // which puts them on the clipboard again; the × takes them off for good.
 
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
@@ -47,13 +47,12 @@ async function dragOut(item: ShelfItem) {
 
 export function buildShelf(actions: ViewActions): ViewHost {
   const title = h("div", { class: "title", text: "Shelf" });
-  const paste = h("button", { class: "link-btn shelf-paste", text: "Paste", title: "Put what is on the clipboard on the shelf" });
   const note = h("div", { class: "sub" });
   const items = h("div", { class: "shelf-items" });
   const body = h(
     "div",
     { class: "card" },
-    h("div", { class: "stack shelf-body" }, h("div", { class: "shelf-head" }, title, paste), note, items),
+    h("div", { class: "stack shelf-body" }, title, note, items),
   );
   const el = h("div", { class: "view" }, body);
 
@@ -62,8 +61,8 @@ export function buildShelf(actions: ViewActions): ViewHost {
   // the shelf is what is being worked in; leaving the view gives it back.
   el.addEventListener("mousedown", () => void Bridge.focusWindow(true));
 
-  const HINT = "Drag one out, or click it to copy it.";
-  const EMPTY = "Nothing here yet. Carry a file up here, or paste what you copied.";
+  const HINT = "Drag one out, or click it to copy it. Ctrl+V adds what you copied.";
+  const EMPTY = "Nothing here yet. Carry a file up here, or click here and press Ctrl+V.";
   let message: string | null = null;
   let messageTimer: number | null = null;
   let renderedKey = "";
@@ -88,12 +87,7 @@ export function buildShelf(actions: ViewActions): ViewHost {
     }
   }
 
-  paste.addEventListener("click", () => {
-    actions.blip();
-    void pasteClipboard();
-  });
-  // Ctrl+V works once the shelf has been clicked (see above); the button
-  // works always.
+  // Ctrl+V works once the shelf has been clicked (see above).
   window.addEventListener("keydown", (e) => {
     if (State.view !== "shelf" || State.mode !== "expanded") return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
