@@ -5,6 +5,7 @@
 // the file being sucked in. The island's own Mochi is hidden for the duration,
 // exactly as on macOS, because this canvas draws its own.
 
+import { UPLOAD_CHOICES, type UploadChoice } from "../core/study";
 import { State } from "../core/state";
 import {
   USC, eIn, eInOut, eOut, lerp, progressAt,
@@ -58,14 +59,27 @@ function text(
 }
 
 export interface UploadCanvasActions {
-  /** Primary button — hand the file to the chat. */
-  ask(): void;
-  /** Secondary button. */
-  cancel(): void;
+  /** One of the buttons on the choose card. */
+  choose(id: UploadChoice): void;
+}
+
+/** Where the choose buttons sit: one row, left to right. */
+const CHOICE_X0 = 114;
+const CHOICE_Y = 113;
+const CHOICE_H = 26;
+const CHOICE_GAP = 6;
+
+function choiceBoxes(): { id: UploadChoice; label: string; x: number; w: number }[] {
+  let x = CHOICE_X0;
+  return UPLOAD_CHOICES.map((c) => {
+    const box = { ...c, x };
+    x += c.w + CHOICE_GAP;
+    return box;
+  });
 }
 
 export class UploadCanvas {
-  /** Wrapper holding the canvas and the two invisible choose buttons. */
+  /** Wrapper holding the canvas and the invisible choose buttons. */
   readonly el: HTMLElement;
 
   private canvas: HTMLCanvasElement;
@@ -83,15 +97,15 @@ export class UploadCanvas {
       const b = document.createElement("button");
       b.className = "upload-hit";
       b.style.left = `${x}px`;
-      b.style.top = "113px";
+      b.style.top = `${CHOICE_Y}px`;
       b.style.width = `${w}px`;
-      b.style.height = "26px";
+      b.style.height = `${CHOICE_H}px`;
       b.addEventListener("click", onclick);
       return b;
     };
     this.overlay = document.createElement("div");
     this.overlay.id = "upload-overlay";
-    this.overlay.append(mk(114, 168, actions.ask), mk(290, 120, actions.cancel));
+    this.overlay.append(...choiceBoxes().map((c) => mk(c.x, c.w, () => actions.choose(c.id))));
 
     this.el = document.createElement("div");
     this.el.id = "upload-layer";
@@ -276,15 +290,21 @@ export class UploadCanvas {
     text(ctx, `${name} is ready.`, 114, 80, `600 14px ${FONT}`, "#F5F6F8");
     text(ctx, "What do you want to do with it?", 114, 100, `400 12.5px ${FONT}`, "#9398A1");
 
-    ctx.fillStyle = "#F5F6F8";
-    rr(ctx, 114, 113, 168, 26, 13);
-    ctx.fill();
-    text(ctx, "Ask a question about it", 198, 126, `500 12.5px ${FONT}`, "#0B0C0E", "center");
-
-    ctx.fillStyle = "rgba(255,255,255,0.09)";
-    rr(ctx, 290, 113, 120, 26, 13);
-    ctx.fill();
-    text(ctx, "Cancel", 350, 126, `500 12.5px ${FONT}`, "#F1F2F4", "center");
+    choiceBoxes().forEach((c, i) => {
+      const primary = i === 0;
+      ctx.fillStyle = primary ? "#F5F6F8" : "rgba(255,255,255,0.09)";
+      rr(ctx, c.x, CHOICE_Y, c.w, CHOICE_H, CHOICE_H / 2);
+      ctx.fill();
+      text(
+        ctx,
+        c.label,
+        c.x + c.w / 2,
+        CHOICE_Y + CHOICE_H / 2,
+        `500 12.5px ${FONT}`,
+        primary ? "#0B0C0E" : "#F1F2F4",
+        "center",
+      );
+    });
     ctx.restore();
   }
 

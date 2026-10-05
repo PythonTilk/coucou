@@ -11,6 +11,9 @@ import { createMiniBot, pruneMiniBots } from "../mochi/minibots";
 import { buildPrompt } from "./chat";
 import { buildChoose, buildUpload, buildUploading } from "./upload";
 import { renderIntegrationCard, type IntegrationCardHooks } from "./integrations";
+import { buildFocus } from "./focus";
+import { buildShelf } from "./shelf";
+import type { UploadChoice } from "../core/study";
 
 export interface ViewActions {
   setView(v: IslandViewName): void;
@@ -20,6 +23,8 @@ export interface ViewActions {
   /** The ↗ button: opens whatever the focused pill points at. */
   openTarget(): void;
   openUrl(url: string): void;
+  /** A button on the drop card: ask, a study shortcut, the shelf, or cancel. */
+  choose(id: UploadChoice): void;
   decide(d: "allow" | "deny"): void;
   /** Answers the question Claude Code asked: question text → chosen label. */
   answer(answers: Record<string, string>): void;
@@ -87,6 +92,8 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const tabHome = h("button", { class: "tab", title: "Overview", onclick: () => go("overview") }, svg(ICONS.house, 13));
   const tabChat = h("button", { class: "tab", title: "Ask", onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
   const tabDrop = h("button", { class: "tab", title: "Drop", onclick: () => go("upload") }, svg(ICONS.plus, 13));
+  const tabShelf = h("button", { class: "tab", title: "Shelf", onclick: () => go("shelf") }, svg(ICONS.stack, 13));
+  const tabFocus = h("button", { class: "tab", title: "Focus timer", onclick: () => go("focus") }, svg(ICONS.timer, 13));
 
   const gearBtn = h("button", { title: "Settings", onclick: () => go("settings") }, svg(ICONS.gear, 14));
   const soundBtn = h("button", { title: "Mute", onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
@@ -99,7 +106,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const el = h(
     "div",
     { id: "header" },
-    h("div", { class: "tabs" }, tabHome, tabChat, tabDrop),
+    h("div", { class: "tabs" }, tabHome, tabChat, tabDrop, tabShelf, tabFocus),
     h("div", { class: "header-actions" }, gearBtn, soundBtn),
   );
 
@@ -110,6 +117,8 @@ export function buildHeader(actions: ViewActions): ViewHost {
       tabHome.classList.toggle("on", v === "overview" || v === "empty");
       tabChat.classList.toggle("on", v === "prompt");
       tabDrop.classList.toggle("on", v === "upload");
+      tabShelf.classList.toggle("on", v === "shelf");
+      tabFocus.classList.toggle("on", v === "focus");
       gearBtn.classList.toggle("on", v === "settings");
       clear(gearBtn);
       gearBtn.append(svg(v === "settings" ? ICONS.gearFill : ICONS.gear, 14));
@@ -585,6 +594,8 @@ export function buildViews(
   map.set("upload", buildUpload());
   map.set("uploading", buildUploading());
   map.set("choose", buildChoose(actions));
+  map.set("shelf", buildShelf(actions));
+  map.set("focus", buildFocus(actions));
   // Not in the Windows v1: sending a file by email, window attach + web result.
   map.set("mail", buildPlaceholder("Sending by email isn't in this version.", ""));
   map.set("searching", buildPlaceholder("Claude is searching…", ""));

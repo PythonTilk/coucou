@@ -6,6 +6,7 @@ import { ICONS } from "./icons";
 import { Bridge, type ChatContext } from "../core/bridge";
 import { Sound } from "../core/sound";
 import { State, type ChatMessage } from "../core/state";
+import type { PresetPrompt } from "../core/study";
 import type { ViewHost } from "./views";
 
 let nextId = 1;
@@ -58,14 +59,15 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
   let sending = false;
   let renderedCount = -1;
 
-  async function submit() {
-    const query = input.value.trim();
+  /** `preset` is a study shortcut: its short label is shown, its full text sent. */
+  async function submit(preset?: PresetPrompt) {
+    const query = preset ? preset.query : input.value.trim();
     if (!query || sending) return;
-    input.value = "";
+    if (!preset) input.value = "";
     sending = true;
     Sound.play("send");
 
-    State.chatHistory.push({ id: nextId++, role: "user", content: query });
+    State.chatHistory.push({ id: nextId++, role: "user", content: preset ? preset.label : query });
     State.stateOverride = "thinking";
     State.notify();
     onHeightChange();
@@ -104,6 +106,12 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
   return {
     el,
     sync() {
+      const preset = State.pendingPrompt;
+      if (preset && !sending) {
+        State.pendingPrompt = null;
+        void submit(preset);
+      }
+
       const file = State.droppedFile;
       const wantChip = file?.name ?? "";
       if (chipRow.dataset.label !== wantChip) {

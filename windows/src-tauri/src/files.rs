@@ -24,15 +24,23 @@ pub fn inbox_dir() -> PathBuf {
 }
 
 pub fn ingest(source: &str) -> Result<DroppedFile, String> {
+    let dir = inbox_dir();
+    let file = copy_into(&dir, source)?;
+    sweep(&dir);
+    Ok(file)
+}
+
+/// Copies `source` into `dir` under its own name, never over a file that is
+/// already there.
+pub fn copy_into(dir: &Path, source: &str) -> Result<DroppedFile, String> {
     let src = Path::new(source);
     let meta = std::fs::metadata(src).map_err(|e| format!("cannot read {source}: {e}"))?;
     if meta.is_dir() {
         return Err("Folders can't be dropped yet.".into());
     }
 
-    let dir = inbox_dir();
     crate::platform::ensure_private_dir(&settings::local_dir()).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
 
     let name = src
         .file_name()
@@ -59,7 +67,6 @@ pub fn ingest(source: &str) -> Result<DroppedFile, String> {
     if let Ok(file) = std::fs::File::options().write(true).open(&dest) {
         let _ = file.set_modified(SystemTime::now());
     }
-    sweep(&dir);
 
     Ok(DroppedFile {
         name,

@@ -1,6 +1,7 @@
 // App state — mirror of AppState.swift (the parts the island needs).
 
 import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
+import type { PresetPrompt } from "./study";
 import type { EyeShape } from "../mochi/engine";
 
 export type AgentSource = "claudeCode" | "n8n" | "agent";
@@ -33,6 +34,13 @@ export interface SessionHost {
   pids: number[];
   /** The classic console window, when there is one. */
   hwnd: number | null;
+}
+
+/** A file parked on the shelf. */
+export interface ShelfItem {
+  name: string;
+  path: string;
+  size: number;
 }
 
 export interface ApprovalInfo {
@@ -88,12 +96,13 @@ export const INTEGRATION_AGENTS: AgentTask[] = [
   task("integration_github", "GitHub", "#F4505E", "n8n"),
   task("integration_notion", "Notion", "#8C8C8C", "n8n"),
   task("integration_calcom", "Cal.com", "#C9956A", "n8n"),
+  task("integration_calendar", "Calendar", "#38BDF8", "n8n"),
   task("integration_stripe", "Stripe", "#0570DE", "n8n"),
 ];
 
 export const TOGGLEABLE_INTEGRATION_IDS = [
   "integration_resend", "integration_n8n", "integration_vercel", "integration_github",
-  "integration_notion", "integration_calcom", "integration_stripe",
+  "integration_notion", "integration_calcom", "integration_calendar", "integration_stripe",
 ];
 
 /** What an integration poller last reported. */
@@ -170,6 +179,13 @@ class AppState {
   noteMessage: string | null = null;
   searchResult: SearchResult | null = null;
   chatHistory: ChatMessage[] = [];
+  /** A question to ask as soon as the chat opens (Summarise, Quiz me…). */
+  pendingPrompt: PresetPrompt | null = null;
+
+  /** What is on the shelf, as last read from disk. */
+  shelf: ShelfItem[] = [];
+  /** True while one of our own files is being dragged out of the island. */
+  shelfDragging = false;
   pendingApproval: ApprovalInfo | null = null;
 
   integrations: Record<string, IntegrationInfo> = {};

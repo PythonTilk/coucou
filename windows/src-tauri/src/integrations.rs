@@ -68,6 +68,7 @@ pub fn start(app: AppHandle) {
     spawn(app.clone(), "integration_resend", 6, 60, poll_resend);
     spawn(app.clone(), "integration_github", 7, 300, poll_github);
     spawn(app.clone(), "integration_calcom", 8, 300, poll_calcom);
+    spawn(app.clone(), "integration_calendar", 10, 900, poll_calendar);
     spawn(app, "integration_notion", 9, 300, poll_notion);
 }
 
@@ -113,6 +114,7 @@ pub async fn poll_once(app: AppHandle, id: &str) {
         "integration_resend" => poll_resend(app).await,
         "integration_notion" => poll_notion(app).await,
         "integration_calcom" => poll_calcom(app).await,
+        "integration_calendar" => poll_calendar(app).await,
         _ => {}
     }
 }
@@ -600,6 +602,55 @@ async fn poll_calcom(app: AppHandle) {
     emit(&app, IntegrationUpdate {
         id: "integration_calcom",
         data: json!({ "bookings": bookings }),
+        error: None,
+        event: None,
+    });
+}
+
+// ── Calendar (ICS feeds) ──────────────────────────────────────────────────────
+
+/// The links live in one Credential Manager entry, separated by spaces or
+/// commas: a timetable link usually carries a private token.
+async fn poll_calendar(app: AppHandle) {
+    let Some(links) = secrets::get("calendar-ics-url") else { return };
+    let mut feeds = Vec::new();
+    let mut failure = None;
+    for link in links.split(|c: char| c.is_whitespace() || c == ',').filter(|l| !l.is_empty()) {
+        // `webcal://` is how calendar apps spell an https link to a feed.
+        let url = match link.strip_prefix("webcal://") {
+            Some(rest) => format!("https://{rest}"),
+            None => link.to_string(),
+        };
+        if !(url.starts_with("https://") || url.starts_with("http://")) {
+            failure = Some("A calendar link must start with https://".to_string());
+            continue;
+        }
+        match client().get(&url).send().await {
+            Ok(response) if response.status().is_success() => {
+                feeds.push(response.text().await.unwrap_or_default());
+            }
+            Ok(response) => {
+                failure = Some(format!("Calendar link answered {}", response.status().as_u16()));
+            }
+            Err(_) => failure = Some("Could not reach the calendar".to_string()),
+        }
+    }
+
+    // One link failing must not blank out the others.
+    if feeds.is_empty() {
+        if let Some(error) = failure {
+            emit(&app, IntegrationUpdate {
+                id: "integration_calendar",
+                data: json!({}),
+                error: Some(error),
+                event: None,
+            });
+        }
+        return;
+    }
+    emit(&app, IntegrationUpdate {
+        id: "integration_calendar",
+        data: json!({ "events": crate::calendar::upcoming(&feeds) }),
         error: None,
         event: None,
     });

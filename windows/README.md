@@ -43,7 +43,7 @@ installs for the current user only — no admin prompt.
 | Click the small island | It opens |
 | Click Mochi | It gets annoyed. Three times in a row and it goes dizzy |
 | Rest the pointer on Mochi for two seconds | Hearts |
-| Drag a file onto the island | Mochi turns into a box, swallows it, then offers to answer questions about it |
+| Drag a file onto the island | Mochi turns into a box, swallows it, then offers what to do with it: ask about it, **Summarise**, **Explain**, **Quiz me**, or **Keep on shelf** |
 | `Esc` | Closes the island |
 | Click anywhere else | Folds the open island (a card waiting for an answer stays up) |
 | Tray icon | Open, Settings…, Pause, Quit |
@@ -51,6 +51,24 @@ installs for the current user only — no admin prompt.
 Everything else happens on its own: a Claude Code permission request opens the
 island with **Deny / Allow**, a finished session shows what it did, and
 your integrations sit in the coloured pills next to Mochi.
+
+## Shelf, focus timer and calendar
+
+Three things for studying, each with its own tab or pill.
+
+- **Shelf** — a place to park files. Drop one on the island and choose **Keep on
+  shelf**; later, drag it back out to wherever it is needed, or click it to put
+  it on the clipboard. The × takes it off. Files on the shelf stay until you
+  remove them (`%LOCALAPPDATA%\Coucou\shelf`).
+- **Focus timer** — 25 / 5 or 50 / 10. The clock shows in the compact island
+  while it runs, Mochi tells you when a stretch or a break is over, and the
+  minutes you studied today are counted, per subject if you name one.
+- **Calendar** — a pill with what is coming up in the next two weeks, from one
+  or more ICS links (a university timetable, a calendar's public link, a Moodle
+  export): **Settings… → Integrations → Calendar**. Ten minutes before
+  something starts, the island shows itself. Repeating lectures, cancelled
+  weeks and all-day deadlines are understood; times are taken to be in this
+  computer's time zone.
 
 ## Claude Code
 

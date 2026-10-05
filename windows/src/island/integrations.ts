@@ -16,12 +16,44 @@ const KEY_FOR: Record<string, string> = {
   integration_resend: "resend-api-key",
   integration_notion: "notion-api-key",
   integration_calcom: "calcom-api-key",
+  integration_calendar: "calendar-ics-url",
 };
+
+const CALENDAR_ID = "integration_calendar";
+/** How long before something starts the island says so. */
+const NUDGE_MINUTES = 10;
+/** Events already announced, so each is announced once. */
+const nudged = new Set<string>();
+
+/** Reveals the island when a lecture or meeting is about to start. */
+function nudgeForCalendar(island: Island) {
+  if (State.paused) return;
+  const task = State.tasks.find((t) => t.id === CALENDAR_ID);
+  const events = State.integrations[CALENDAR_ID]?.data?.events;
+  if (!task || !Array.isArray(events)) return;
+
+  for (const event of events as { startMs: number; title: string; location?: string | null; allDay: boolean }[]) {
+    if (event.allDay) continue;
+    const minutes = (event.startMs - Date.now()) / 60_000;
+    const key = `${event.startMs}:${event.title}`;
+    if (minutes > NUDGE_MINUTES || minutes < -1 || nudged.has(key)) continue;
+    nudged.add(key);
+
+    const soon = minutes < 1 ? "now" : `in ${Math.round(minutes)} min`;
+    task.steps = [`${event.title} ${soon}`, ...(event.location ? [event.location] : [])];
+    task.stepIndex = 0;
+    if (State.focusId !== CALENDAR_ID) task.pillBadge = "approval";
+    Sound.play("question");
+    island.reveal();
+    State.notify();
+  }
+}
 
 const clearTimers = new Map<string, number>();
 
 export function registerIntegrationHandlers(island: Island) {
   void onEvent<IntegrationUpdate>("integration", (update) => handle(island, update));
+  window.setInterval(() => nudgeForCalendar(island), 30_000);
   void refreshConfigured();
 }
 

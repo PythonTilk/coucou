@@ -1,5 +1,6 @@
 // Coucou for Windows — app wiring and the commands the island calls.
 
+mod calendar;
 mod claude;
 mod claude_cli;
 mod files;
@@ -12,6 +13,7 @@ mod pipe;
 mod platform;
 mod secrets;
 mod settings;
+mod shelf;
 mod tray;
 
 use std::process::Command;
@@ -302,6 +304,38 @@ fn ingest_file(path: String) -> Result<DroppedFile, String> {
     files::ingest(&path)
 }
 
+// ── Shelf ─────────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn shelf_list() -> Vec<DroppedFile> {
+    shelf::list()
+}
+
+/// Parks a copy of the file on the shelf.
+#[tauri::command]
+fn shelf_add(path: String) -> Result<DroppedFile, String> {
+    shelf::add(&path)
+}
+
+#[tauri::command]
+fn shelf_remove(path: String) -> Result<(), String> {
+    shelf::remove(&path)
+}
+
+/// Puts the file on the clipboard, ready to paste anywhere.
+#[tauri::command]
+async fn shelf_copy(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || shelf::copy_to_clipboard(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The image shown under the pointer while a file is dragged off the shelf.
+#[tauri::command]
+fn shelf_drag_icon() -> Result<String, String> {
+    shelf::drag_icon()
+}
+
 /// The island may only ask whether a key exists — never read it.
 #[tauri::command]
 fn secret_present(key: String) -> bool {
@@ -414,6 +448,7 @@ pub fn run() {
             let _ = app.emit_to(island::WINDOW_LABEL, "tray", "open".to_string());
         }))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_drag::init())
         .manage(Shared {
             settings: Mutex::new(loaded.clone()),
             gate: gate.clone(),
@@ -442,6 +477,11 @@ pub fn run() {
             chat_reset,
             claude_cli_present,
             ingest_file,
+            shelf_list,
+            shelf_add,
+            shelf_remove,
+            shelf_copy,
+            shelf_drag_icon,
             secret_present,
             secret_set,
             secret_clear,

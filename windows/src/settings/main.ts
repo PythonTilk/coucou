@@ -406,6 +406,11 @@ const INTEGRATIONS: IntegrationDef[] = [
     fields: [{ key: "notion-api-key", label: "Integration token", placeholder: "ntn_…", secret: true }] },
   { id: "integration_calcom", name: "Cal.com", color: "#C9956A",
     fields: [{ key: "calcom-api-key", label: "API key", placeholder: "cal_…", secret: true }] },
+  { id: "integration_calendar", name: "Calendar", color: "#38BDF8",
+    fields: [{
+      key: "calendar-ics-url", label: "ICS link(s)",
+      placeholder: "https://…/timetable.ics — several: separate with spaces", secret: false,
+    }] },
 ];
 
 const MAX_ACTIVE = 4;
@@ -557,7 +562,7 @@ async function main() {
 
   const keys = [
     "stripe-api-key", "github-token", "vercel-token",
-    "n8n-url", "n8n-api-key", "resend-api-key", "notion-api-key", "calcom-api-key",
+    "n8n-url", "n8n-api-key", "resend-api-key", "notion-api-key", "calcom-api-key", "calendar-ics-url",
   ];
   const present: Record<string, boolean> = {};
   for (const k of keys) present[k] = (await Bridge.secretPresent(k)) ?? false;

@@ -101,6 +101,16 @@ export const Bridge = {
   claudeCliPresent: () => call<boolean>("claude_cli_present"),
   /** Copies a dropped file into the inbox. */
   ingestFile: (path: string) => callOrThrow<DroppedFile>("ingest_file", { path }),
+  // ── Shelf ─────────────────────────────────────────────────────────────────
+  shelfList: () => call<DroppedFile[]>("shelf_list"),
+  /** Parks a copy of the file on the shelf. */
+  shelfAdd: (path: string) => callOrThrow<DroppedFile>("shelf_add", { path }),
+  shelfRemove: (path: string) => callOrThrow<void>("shelf_remove", { path }),
+  /** Puts the file on the clipboard, ready to paste. */
+  shelfCopy: (path: string) => callOrThrow<void>("shelf_copy", { path }),
+  /** The image shown under the pointer while a file is dragged out. */
+  shelfDragIcon: () => callOrThrow<string>("shelf_drag_icon"),
+
   /** Only ever tells you whether a key exists — never its value. */
   secretPresent: (key: string) => call<boolean>("secret_present", { key }),
   secretSet: (key: string, value: string) => callOrThrow<void>("secret_set", { key, value }),

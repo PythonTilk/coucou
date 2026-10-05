@@ -1,6 +1,9 @@
 // The island: DOM shell, sizing animation, Mochi placement, mouse handling.
 // Mirrors IslandRootView.swift + IslandWindowController.swift.
 
+import { Focus, formatClock } from "../core/focus";
+import { STUDY_PROMPTS, type UploadChoice } from "../core/study";
+import { addToShelf } from "../views/shelf";
 import { Tracked, Spring, clamp } from "../core/anim";
 import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
 import {
@@ -46,6 +49,8 @@ export class Island {
   private greetingCanvas!: HTMLCanvasElement;
   private miniGrid!: HTMLElement;
   private countdown!: HTMLElement;
+  /** The focus timer's clock, shown in the compact island while it runs. */
+  private focusChip!: HTMLElement;
   private wakeStrip!: HTMLElement;
 
   private header!: ViewHost;
@@ -100,6 +105,38 @@ export class Island {
       this.dirty = true;
       this.ensureRunning();
     });
+    Focus.onPhaseEnd = (ended) => this.onFocusPhaseEnd(ended);
+  }
+
+  /** What to do with the file Mochi just swallowed. */
+  private choose(id: UploadChoice) {
+    const file = State.droppedFile;
+    if (id === "cancel") {
+      this.setView(State.defaultView());
+      return;
+    }
+    if (id === "keep") {
+      if (file) {
+        void addToShelf(file.path).catch((err) => {
+          State.noteMessage = String(err).replace(/^Error:\s*/, "");
+          this.setView("note");
+        });
+      }
+      this.setView("shelf");
+      return;
+    }
+    State.promptContext = file ? { kind: "file", name: file.name, path: file.path } : null;
+    // "Ask" opens an empty chat; the study shortcuts ask their question at once.
+    State.pendingPrompt = STUDY_PROMPTS[id] ?? null;
+    this.setView("prompt");
+  }
+
+  /** A focus stretch or a break ran out: say so, whatever the island was doing. */
+  private onFocusPhaseEnd(ended: "focus" | "break") {
+    Sound.play(ended === "focus" ? "finish" : "work");
+    if (ended === "focus") this.engine.triggerEmote("proud");
+    // A card waiting for an answer keeps the island.
+    if (!State.isPinned) this.alert("focus");
   }
 
   /** The request has its answer: the card goes and the session carries on. */
@@ -146,6 +183,7 @@ export class Island {
       openUrl: (url) => {
         if (url) void Bridge.openUrl(url);
       },
+      choose: (id) => this.choose(id),
       decide: (d) => {
         const req = State.pendingApproval;
         void Bridge.log(`decide ${d} req=${req?.requestId ?? "none"}`);
@@ -196,6 +234,7 @@ export class Island {
     this.greetingCanvas = h("canvas", { id: "greeting-canvas" });
     this.miniGrid = h("div", { id: "mini-grid" });
     this.countdown = h("div", { id: "countdown" });
+    this.focusChip = h("div", { id: "focus-chip" });
 
     this.header = buildHeader(actions);
     this.views = buildViews(actions, () => this.animateGeometry(false));
@@ -205,15 +244,7 @@ export class Island {
 
     // The drop sequence draws the card, the bar and its own Mochi. It sits under
     // the header, which stays visible on top of it exactly as on macOS.
-    this.uploadCanvas = new UploadCanvas({
-      ask: () => {
-        State.promptContext = State.droppedFile
-          ? { kind: "file", name: State.droppedFile.name, path: State.droppedFile.path }
-          : null;
-        this.setView("prompt");
-      },
-      cancel: () => this.setView(State.defaultView()),
-    });
+    this.uploadCanvas = new UploadCanvas({ choose: (id) => this.choose(id) });
 
     this.clipEl = h(
       "div",
@@ -229,6 +260,7 @@ export class Island {
       this.botGlow,
       this.botCanvas,
       this.miniGrid,
+      this.focusChip,
       this.countdown,
     );
 
@@ -369,7 +401,8 @@ export class Island {
 
   private onDragDrop(e: { type: string; paths?: string[] }) {
     if (e.type !== "over") void Bridge.log(`drag ${e.type} ${e.paths?.length ?? 0} file(s)`);
-    if (State.paused) return;
+    // A file dragged off the shelf passes back over the island on its way out.
+    if (State.paused || State.shelfDragging) return;
     switch (e.type) {
       case "enter":
       case "over": {
@@ -890,6 +923,14 @@ export class Island {
       } else if (wasChat) {
         void Bridge.focusWindow(false);
       }
+    }
+
+    // Focus timer in the compact island
+    const timing = Focus.phase !== "idle";
+    this.focusChip.style.opacity = State.mode === "compact" && timing ? "1" : "0";
+    if (timing) {
+      this.focusChip.textContent = formatClock(Focus.remainingMs());
+      this.focusChip.dataset.phase = Focus.paused ? "paused" : Focus.phase;
     }
 
     // Compact mini grid

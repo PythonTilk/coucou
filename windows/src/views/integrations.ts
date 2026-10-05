@@ -315,6 +315,42 @@ function calcomCard(): HTMLElement {
   return h("div", { class: "int-card" }, header("#C9956A", "Cal.com", "Schedule"), rows);
 }
 
+// ── Calendar ──────────────────────────────────────────────────────────────────
+
+/** "Today 14:15", "Tomorrow 08:30", "Thu 10:15", "12.10. 10:15"; the day alone when all-day. */
+export function whenLabel(startMs: number, allDay: boolean, now = new Date()): string {
+  const when = new Date(startMs);
+  const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((midnight(when) - midnight(now)) / 86_400_000);
+  const day =
+    days === 0 ? "Today"
+    : days === 1 ? "Tomorrow"
+    : days < 7 ? when.toLocaleDateString(undefined, { weekday: "short" })
+    : when.toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" });
+  if (allDay) return day;
+  return `${day} ${when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function calendarCard(): HTMLElement {
+  const accent = "#38BDF8";
+  const events = arr("integration_calendar", "events")
+    .slice()
+    .sort((a, b) => Number(a.startMs) - Number(b.startMs));
+  const rows = h("div", { class: "int-rows tight" });
+  if (events.length === 0) {
+    rows.append(h("div", { class: "int-empty", text: "Nothing in the next two weeks" }));
+  }
+  events.slice(0, 3).forEach((e, i) => {
+    const place = typeof e.location === "string" && e.location ? ` · ${e.location}` : "";
+    const time = h("span", { class: "int-time", text: whenLabel(Number(e.startMs), e.allDay === true) });
+    time.style.color = accent;
+    const name = h("span", { class: "int-name", text: `${String(e.title ?? "Event")}${place}` });
+    name.title = name.textContent ?? "";
+    rows.append(listRow(accent, i === 0, time, name));
+  });
+  return h("div", { class: "int-card" }, header(accent, "Calendar", "Coming up"), rows);
+}
+
 // ── n8n ───────────────────────────────────────────────────────────────────────
 
 function n8nCard(task: AgentTask, onDetail: () => void, openSettings: () => void): HTMLElement {
@@ -397,6 +433,7 @@ export function hasIntegrationData(id: string): boolean {
     case "integration_notion":
       return arr(id, "pages").length > 0;
     case "integration_calcom":
+    case "integration_calendar":
       return info.loaded;
     default:
       return false;
@@ -426,6 +463,8 @@ export function renderIntegrationCard(task: AgentTask, hooks: IntegrationCardHoo
       return notionCard();
     case "integration_calcom":
       return calcomCard();
+    case "integration_calendar":
+      return calendarCard();
     default:
       return idleCard(task, hooks.openSettings);
   }
