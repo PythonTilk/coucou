@@ -57,6 +57,11 @@ export function buildShelf(actions: ViewActions): ViewHost {
   );
   const el = h("div", { class: "view" }, body);
 
+  // Ctrl+V needs the keyboard, which the island never holds on its own — it
+  // would take it from whatever is being worked in. A click on the shelf says
+  // the shelf is what is being worked in; leaving the view gives it back.
+  el.addEventListener("mousedown", () => void Bridge.focusWindow(true));
+
   const HINT = "Drag one out, or click it to copy it.";
   const EMPTY = "Nothing here yet. Carry a file up here, or paste what you copied.";
   let message: string | null = null;
@@ -87,8 +92,8 @@ export function buildShelf(actions: ViewActions): ViewHost {
     actions.blip();
     void pasteClipboard();
   });
-  // Ctrl+V only reaches the island when it holds the keyboard, which it rarely
-  // does — the button is the dependable way. When it does arrive, it works.
+  // Ctrl+V works once the shelf has been clicked (see above); the button
+  // works always.
   window.addEventListener("keydown", (e) => {
     if (State.view !== "shelf" || State.mode !== "expanded") return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {

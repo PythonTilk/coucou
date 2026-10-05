@@ -77,6 +77,14 @@ export function tickMiniBots(dt: number) {
   for (const mb of live.values()) {
     const ctx = mb.canvas.getContext("2d");
     if (!ctx) continue;
+    // The canvas was sized for the scale it was created at. If the display
+    // scale has changed since (another monitor, a zoom), drawing at the new
+    // scale into the old size cuts the Mochi off: size it again.
+    const px = Math.round(mb.cssSize * dpr);
+    if (mb.canvas.width !== px) {
+      mb.canvas.width = px;
+      mb.canvas.height = px;
+    }
     mb.engine.update(dt);
     // Cleared in device pixels, the whole canvas. At a fractional scale (150 %)
     // the canvas is a whole number of pixels but `cssSize * dpr` is not, so
