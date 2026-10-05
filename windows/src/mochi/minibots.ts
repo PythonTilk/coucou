@@ -78,8 +78,13 @@ export function tickMiniBots(dt: number) {
     const ctx = mb.canvas.getContext("2d");
     if (!ctx) continue;
     mb.engine.update(dt);
+    // Cleared in device pixels, the whole canvas. At a fractional scale (150 %)
+    // the canvas is a whole number of pixels but `cssSize * dpr` is not, so
+    // clearing in CSS units left the last row and column half-cleared: the glow
+    // piled up there frame after frame into a thin coloured line.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, mb.canvas.width, mb.canvas.height);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, mb.cssSize, mb.cssSize);
     mb.engine.draw(ctx, mb.cssSize, mb.cssSize);
   }
 }
