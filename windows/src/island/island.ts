@@ -440,7 +440,10 @@ export class Island {
       case "over": {
         if (!State.fileDragOver) {
           State.fileDragOver = true;
-          this.engine.animateMorph(1);
+          // No box morph here: at this size its mail slot reads as a stray line
+          // across Mochi's face. He just notices the file; the box is for the
+          // swallow that follows a drop on the chat half.
+          this.engine.triggerEmote("surprised");
           this.openDropMenu();
         }
         const target = this.halfAt(e.x);
