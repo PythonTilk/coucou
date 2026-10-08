@@ -142,7 +142,11 @@ test("a declaration from an older or edited settings file is made usable", () =>
     sanitizeDeclared({ activeIntegrations: ["integration_github"] }, "windows"),
     { mainPill: "integration_claude", activeIntegrations: ["integration_github"] },
   );
+  // This build lets Claude Desktop be the main pill where the app exists (Windows)…
   assert.equal(sanitizeDeclared({ mainPill: "agent_claude-desktop", activeIntegrations: [] }, "windows").mainPill,
+    "agent_claude-desktop");
+  // …and nowhere else.
+  assert.equal(sanitizeDeclared({ mainPill: "agent_claude-desktop", activeIntegrations: [] }, "linux").mainPill,
     "integration_claude");
 });
 

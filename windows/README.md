@@ -148,6 +148,8 @@ whatever the interface language:
   others: each turn runs through the `claude` you have installed and signed in
   to, with web search and file reading only. Upstream declined this one on
   policy grounds (#113, #138); it is here by choice.
+- **Claude Desktop can be the main pill** — **Settings… → Active pills → Main
+  tool**, on Windows: for when the Claude app's Code tab is where you work.
 - **Click anywhere else** folds the open island (a card waiting for an answer
   stays up).
 - **Fixes**: the hidden island wakes when the pointer reaches the top-centre of
