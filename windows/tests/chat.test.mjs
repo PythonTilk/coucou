@@ -38,7 +38,6 @@ beforeEach(() => {
 });
 
 const $ = (cls) => view.el.querySelector(cls);
-const chips = () => view.el.find(".picker-chip").map((c) => c.textContent);
 const models = () => view.el.find(".picker-model").map((m) => m.textContent);
 
 test("the model button shows the active provider's model", () => {
@@ -56,7 +55,8 @@ test("a provider without a key is never asked for its models", async () => {
   $(".model-btn").fire("click");
   await flush();
   assert.ok($(".chat-body").classList.contains("picking"));
-  assert.deepEqual(chips(), ["Anthropic", "Google", "OpenAI", "OpenRouter", "Claude Code"]);
+  // The provider is picked in Settings → Chat: the island only lists models.
+  assert.equal(view.el.find(".picker-chip").length, 0);
   assert.deepEqual(sent("secret_present"), [{ key: "anthropic-api-key" }]);
   assert.deepEqual(sent("chat_models"), []);
   assert.match($(".picker-status").textContent, /No API key/);
@@ -79,15 +79,13 @@ test("with a key, the models are listed and picking one saves it", async () => {
   assert.equal($(".model-name").textContent, "claude-sonnet-5");
 });
 
-test("switching provider saves it and asks the new provider only", async () => {
+test("the picker lists the provider picked in Settings, keeping a sensible model", async () => {
   answers.secret_present = (args) => args.key === "google-api-key";
   answers.chat_models = (args) => (args.provider === "google" ? [{ id: "gemini-2.5-flash", label: "gemini-2.5-flash" }] : []);
+  State.settings = { ...State.settings, chatProvider: "google" };
+  view.sync();
   $(".model-btn").fire("click");
   await flush();
-  assert.deepEqual(sent("chat_models"), []);
-  view.el.find(".picker-chip")[1].fire("click");
-  await flush();
-  assert.equal(State.settings.chatProvider, "google");
   assert.deepEqual(sent("chat_models"), [{ provider: "google" }]);
   // The saved model was not offered: the flash one is kept instead, and saved.
   assert.equal(State.settings.chatModels.google, "gemini-2.5-flash");

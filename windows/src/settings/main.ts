@@ -3,8 +3,13 @@
 // integrations land here too in a later stage.
 
 import "./settings.css";
-import { Bridge, onEvent, type HookPreview, type HookStatus, type ShortcutsReport } from "../core/bridge";
-import { CUSTOM_SERVER_KEY, providerDef, urlExposure } from "../core/providers";
+import {
+  Bridge, onEvent, type HookPreview, type HookStatus, type ModelInfo, type ShortcutsReport,
+} from "../core/bridge";
+import {
+  CUSTOM_SERVER_KEY, activeModel, pickModel, providerDef, urlExposure, visibleProviders, withModel,
+  type ProviderDef,
+} from "../core/providers";
 import {
   ISLAND_SHORTCUTS, SHORTCUTS, SHORTCUT_TEXT, activeKeys, displayKeys, duplicates, effective,
   recordPress, type Binding,
@@ -320,12 +325,6 @@ function planSection(status: HookStatus): HTMLElement {
 
 // ── Claude API section ────────────────────────────────────────────────────────
 
-const MODELS: [string, string][] = [
-  ["claude-opus-5", "Claude Opus 5"],
-  ["claude-sonnet-5", "Claude Sonnet 5"],
-  ["claude-haiku-4-5", "Claude Haiku 4.5"],
-];
-
 function apiSection(hasKey: boolean): HTMLElement {
   const dot = statusDot(hasKey);
   const state = h("span", { class: "hint", text: hasKey ? t("Key saved in the {store}.", { store: KEY_STORE }) : t("No key yet — the chat needs one.") });
@@ -377,17 +376,6 @@ function apiSection(hasKey: boolean): HTMLElement {
     }
   });
 
-  const model = h("select", {}) as HTMLSelectElement;
-  for (const [id, label] of MODELS) model.append(h("option", { value: id, text: label }));
-  if (!MODELS.some(([id]) => id === settings.model)) {
-    model.append(h("option", { value: settings.model, text: settings.model }));
-  }
-  model.value = settings.model;
-  model.addEventListener("change", () => {
-    settings.model = model.value;
-    void save();
-  });
-
   clearBtn.style.display = hasKey ? "" : "none";
 
   return h(
@@ -396,75 +384,135 @@ function apiSection(hasKey: boolean): HTMLElement {
     h("h2", {}, dot, h("span", { text: "Claude" })),
     state,
     h("div", { class: "row" }, h("label", { text: t("API key") }), field, saveBtn, clearBtn),
-    h("div", { class: "row" }, h("label", { text: t("Model") }), model),
     feedback,
   );
 }
 
-// ── Claude Code chat section (local to this build) ────────────────────────────
+// ── Chat section (local to this build) ────────────────────────────────────────
 
 const CLAUDE_CODE = "claudecode";
-const CLAUDE_CODE_MODELS: [string, string][] = [
-  ["claude-opus-5-5", "Claude Opus 5.5"],
-  ["claude-opus-5", "Claude Opus 5"],
-  ["claude-sonnet-5-5", "Claude Sonnet 5.5"],
-  ["claude-sonnet-5", "Claude Sonnet 5"],
-  ["claude-haiku-4-5", "Claude Haiku 4.5"],
-  ["claude-fable-5-1", "Claude Fable 5.1"],
-];
+
+const PICK_STRINGS = {
+  get hint() { return t("Where the chat goes and which model answers. The model name above the chat box only switches between this provider's models."); },
+  get provider() { return t("Provider"); },
+  get loading() { return t("Loading models…"); },
+  get noKey() { return t("No key yet — add it below."); },
+};
 
 /**
- * The chat through Claude Code, on the account it is signed in to — the same
- * provider the chat's model picker offers as "Claude Code" (claude_cli.rs).
- * Here it can be switched on and given a model without opening the chat.
+ * Where the chat goes, and with which model — the provider chips and model list
+ * of the chat's picker (views/chat.ts), moved here. The island keeps only the
+ * model list, for the provider picked here.
  */
-function claudeCodeChatSection(found: boolean): HTMLElement {
-  const dot = statusDot(found);
-  const state = h("div", {
-    class: "hint",
-    text: found
-      ? "Chat through Claude Code, on the account it is signed in to: no API key, and it counts against your Claude plan. Mochi gets web search and can read a dropped file, nothing else."
-      : "Claude Code was not found. Install it and run `claude` once to sign in, then reopen Settings.",
-  });
+function chatSection(hasClaudeCode: boolean): HTMLElement {
+  const dot = h("i", { class: "dot" });
+  const chips = h("div", { class: "provider-chips" });
+  const model = h("select", { class: "model-select" }) as HTMLSelectElement;
+  const status = h("div", { class: "hint" });
 
-  const use = h("button", {}) as HTMLButtonElement;
-  const drawUse = () => {
-    const inUse = settings.chatProvider === CLAUDE_CODE;
-    use.textContent = inUse ? CHAT_STRINGS.inUse : CHAT_STRINGS.useInChat;
-    use.className = inUse ? "primary" : "";
-    use.title = inUse ? "Click to go back to the Anthropic API key" : "";
-  };
-  use.addEventListener("click", () => {
-    settings.chatProvider = settings.chatProvider === CLAUDE_CODE ? "anthropic" : CLAUDE_CODE;
-    void save();
-    drawUse();
-  });
-  drawUse();
+  /** Models already asked for, by provider; a model server is asked again each time. */
+  const cache = new Map<string, ModelInfo[]>();
+  let request = 0;
+  let shown = "";
+  let listed: ModelInfo[] = [];
 
-  const current = settings.chatModels[CLAUDE_CODE] || "claude-sonnet-5";
-  const model = h("select", {}) as HTMLSelectElement;
-  for (const [id, label] of CLAUDE_CODE_MODELS) model.append(h("option", { value: id, text: label }));
-  // A model set by hand, or picked from a list that has moved on, stays selectable.
-  if (!CLAUDE_CODE_MODELS.some(([id]) => id === current)) {
-    model.append(h("option", { value: current, text: current }));
+  function fill(p: ProviderDef, models: ModelInfo[]) {
+    listed = models;
+    clear(model);
+    const current = activeModel(settings);
+    for (const m of models) model.append(h("option", { value: m.id, text: m.label }));
+    // A model set by hand, or picked from a list that has moved on, stays selectable.
+    if (current && !models.some((m) => m.id === current)) {
+      model.append(h("option", { value: current, text: current }));
+    }
+    model.value = current;
+    model.disabled = models.length === 0 && !current;
+    status.textContent = "";
+    if (p.id === CLAUDE_CODE) {
+      status.textContent = hasClaudeCode
+        ? "On the account Claude Code is signed in to: no API key, it counts against your Claude plan. The newest models may need an up-to-date Claude Code (`claude update`)."
+        : "Claude Code was not found. Install it and run `claude` once to sign in, then reopen Settings.";
+    }
   }
-  model.value = current;
+
+  async function load() {
+    const p = providerDef(settings.chatProvider);
+    const ticket = ++request;
+    const cached = p.urlField ? undefined : cache.get(p.id);
+    if (cached) {
+      fill(p, cached);
+      return;
+    }
+    clear(model);
+    model.disabled = true;
+    // Nothing is asked of a provider that has no key yet.
+    if (p.key && !(await Bridge.secretPresent(p.key))) {
+      if (ticket === request) status.textContent = PICK_STRINGS.noKey;
+      return;
+    }
+    if (ticket !== request) return;
+    status.textContent = PICK_STRINGS.loading;
+    try {
+      const models = await Bridge.chatModels(p.id);
+      if (ticket !== request) return;
+      if (!p.urlField) cache.set(p.id, models);
+      const keep = pickModel(p, models.map((m) => m.id), activeModel(settings));
+      if (keep && keep !== activeModel(settings)) {
+        settings = withModel(settings, p.id, keep);
+        void save();
+      }
+      fill(p, models);
+    } catch (err) {
+      if (ticket === request) status.textContent = String(err).replace(/^Error:\s*/, "");
+    }
+  }
+
+  function draw() {
+    const active = providerDef(settings.chatProvider);
+    dot.style.background = active.accent;
+    clear(chips);
+    for (const p of visibleProviders(settings)) {
+      const on = p.id === active.id;
+      const chip = h(
+        "button",
+        { class: on ? "provider-chip on" : "provider-chip", style: `--accent:${p.accent}` },
+        h("i", { class: "provider-dot" }),
+        h("span", { text: t(p.name) }),
+      );
+      chip.addEventListener("click", () => {
+        if (p.id === settings.chatProvider) return;
+        settings.chatProvider = p.id;
+        void save();
+        draw();
+      });
+      chips.append(chip);
+    }
+    // The list is asked for again only when the provider changed (or a model
+    // server, whose list moves); a model picked in the island just shows.
+    if (shown !== active.id) {
+      shown = active.id;
+      void load();
+    } else if (model.options.length > 0 && model.value !== activeModel(settings)) {
+      fill(active, listed);
+    }
+  }
+
   model.addEventListener("change", () => {
-    settings.chatModels = { ...settings.chatModels, [CLAUDE_CODE]: model.value };
+    settings = withModel(settings, providerDef(settings.chatProvider).id, model.value);
     void save();
   });
+
+  draw();
+  declaredViews.push(draw);
 
   return h(
     "section",
     {},
-    h("h2", {}, dot, h("span", { text: "Claude Code chat" })),
-    state,
-    h("div", { class: "row" }, h("label", { text: "Chat with Claude Code" }), use),
+    h("h2", {}, dot, h("span", { text: t("Chat") })),
+    h("div", { class: "hint", text: PICK_STRINGS.hint }),
+    h("div", { class: "row" }, h("label", { text: PICK_STRINGS.provider }), chips),
     h("div", { class: "row" }, h("label", { text: t("Model") }), model),
-    h("div", {
-      class: "hint",
-      text: "The newest models may need an up-to-date Claude Code (`claude update`), and some are not included in every plan.",
-    }),
+    status,
   );
 }
 
@@ -554,17 +602,15 @@ function activePillsSection(connected: Record<string, boolean>): HTMLElement {
 
 const CHAT_STRINGS = {
   get providersTitle() { return t("Chat providers"); },
-  get providersHint() { return t("Chat with Google AI, OpenAI or OpenRouter instead of Claude: add a key here, then click the model name above the chat box to switch provider and model. Keys stay in the system keychain. These providers get no web search and no tools: they can answer, never act on this computer."); },
+  get providersHint() { return t("Chat with Google AI, OpenAI or OpenRouter instead of Claude: add a key here, then pick it under Chat above. Keys stay in the system keychain. These providers get no web search and no tools: they can answer, never act on this computer."); },
   get stored() { return `••••••••  ${t("(stored)")}`; },
   get save() { return t("Save"); },
   get remove() { return t("Remove"); },
   get localTitle() { return t("Local models"); },
-  get localHint() { return t("Chat with a model you run yourself: Ollama or LM Studio (leave the address empty for the usual one on this computer), or any server that speaks the OpenAI API, such as vLLM or llama.cpp. Once connected, pick it above the chat box."); },
+  get localHint() { return t("Chat with a model you run yourself: Ollama or LM Studio (leave the address empty for the usual one on this computer), or any server that speaks the OpenAI API, such as vLLM or llama.cpp. Once connected, pick it under Chat above."); },
   get connect() { return t("Connect"); },
   get connecting() { return t("Connecting…"); },
   get disconnect() { return t("Disconnect"); },
-  get useInChat() { return t("Use in chat"); },
-  get inUse() { return t("In use"); },
   get keyOptional() { return t("API key (optional)"); },
   get localOnly() { return t("Nothing leaves your PC: the server runs on this computer."); },
   get remote() { return t("This address is another machine: what you ask is sent to it."); },
@@ -715,13 +761,6 @@ function localSection(customKey: boolean): HTMLElement {
     const block = h("div", { style: "display:flex;flex-direction:column;gap:6px" });
 
     if (connected) {
-      const inUse = settings.chatProvider === id;
-      const use = h("button", { class: inUse ? "" : "primary", text: inUse ? CHAT_STRINGS.inUse : CHAT_STRINGS.useInChat });
-      use.disabled = inUse;
-      use.addEventListener("click", () => {
-        settings.chatProvider = id;
-        void save().then(redraw);
-      });
       const disconnect = h("button", { class: "danger", text: CHAT_STRINGS.disconnect });
       disconnect.addEventListener("click", async () => {
         settings[field] = "";
@@ -734,7 +773,7 @@ function localSection(customKey: boolean): HTMLElement {
         redraw();
       });
       block.append(
-        h("div", { class: "row" }, label, h("span", { class: "path", text: settings[field] }), statusDot(true), use, disconnect),
+        h("div", { class: "row" }, label, h("span", { class: "path", text: settings[field] }), statusDot(true), disconnect),
         status,
       );
       exposure.append(exposureNotice(settings[field], id === "custom" && customKey) ?? "");
@@ -1393,8 +1432,8 @@ async function render() {
       {
         title: t("Chat"),
         sections: [
+          ["chat-pick", chatSection(hasClaudeCode)],
           ["chat-claude", apiSection(hasKey)],
-          ["chat-claude-code", claudeCodeChatSection(hasClaudeCode)],
           ["chat-providers", chatProvidersSection(chatKeys, keyChanged)],
           ["chat-local", localSection(customKey)],
         ],

@@ -3,15 +3,15 @@
 //
 // Answers are rendered as Markdown (markdown.ts). A local model streams its
 // answer: Rust sends `chat-delta` events with the text visible so far. The
-// model name above the text field opens the picker: provider chips, then the
-// models of the chosen provider, asked for only once it is picked.
+// model name above the text field opens the picker: the active provider's
+// models. The provider itself is chosen in Settings → Chat (this build).
 
 import { h, svg, clear } from "./dom";
 import { ICONS } from "./icons";
 import { renderMarkdown } from "./markdown";
 import { Bridge, onEvent, type ChatContext, type ModelInfo } from "../core/bridge";
 import {
-  activeModel, pickModel, providerDef, visibleProviders, withModel, type ProviderDef,
+  activeModel, pickModel, providerDef, withModel, type ProviderDef,
 } from "../core/providers";
 import { Sound } from "../core/sound";
 import { State, type ChatMessage } from "../core/state";
@@ -23,7 +23,7 @@ const STRINGS = {
   placeholderFirst: N_("Ask me anything…"),
   placeholderNext: N_("Continue…"),
   send: N_("Send"),
-  switchModel: N_("Switch provider or model"),
+  switchModel: N_("Switch model"),
   noModel: N_("Choose a model"),
   loading: N_("Loading models…"),
   noKey: N_("No API key — add it in Settings."),
@@ -73,39 +73,18 @@ interface Picker {
   readonly isOpen: boolean;
 }
 
-/** Provider chips, then the chosen provider's models — ModelPickerView. */
+/**
+ * The active provider's models — ModelPickerView without its provider chips:
+ * in this build the provider is picked in Settings → Chat.
+ */
 function buildPicker(onChange: () => void): Picker {
-  const chips = h("div", { class: "picker-chips" });
   const list = h("div", { class: "picker-list" });
-  const el = h("div", { class: "picker" }, chips, h("div", { class: "picker-rule" }), list);
+  const el = h("div", { class: "picker" }, list);
 
   /** Models already asked for, by provider; a model server is asked again each time. */
   const cache = new Map<string, ModelInfo[]>();
   let isOpen = false;
   let request = 0;
-
-  function drawChips() {
-    clear(chips);
-    for (const p of visibleProviders(State.settings)) {
-      const on = p.id === State.settings.chatProvider;
-      const chip = h(
-        "button",
-        { class: on ? "picker-chip on" : "picker-chip", style: `--accent:${p.accent}` },
-        h("i", { class: "picker-dot" }),
-        h("span", { text: t(p.name) }),
-      );
-      chip.addEventListener("click", () => {
-        if (p.id === State.settings.chatProvider) return;
-        State.settings = { ...State.settings, chatProvider: p.id };
-        saveSettings();
-        Sound.play("pop");
-        drawChips();
-        void loadModels();
-        onChange();
-      });
-      chips.append(chip);
-    }
-  }
 
   function status(text: string, withSettings = false) {
     clear(list);
@@ -178,7 +157,6 @@ function buildPicker(onChange: () => void): Picker {
   function open() {
     isOpen = true;
     el.classList.add("on");
-    drawChips();
     onChange();
     void loadModels();
   }

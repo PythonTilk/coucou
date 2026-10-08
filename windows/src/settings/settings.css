@@ -480,3 +480,47 @@ select option {
 html[dir="rtl"] :is(.diff, .path, .keycap, input[type="password"], input[type="text"]) {
   direction: ltr;
 }
+
+/* Chat section: the provider chips and model list moved here from the island's
+   picker (this build), sized to be read at a glance. */
+
+.provider-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.provider-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font: 500 13px var(--font);
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--hairline);
+}
+
+.provider-chip.on {
+  color: var(--ink);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.provider-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+select.model-select {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 13.5px;
+  padding: 8px 10px;
+}

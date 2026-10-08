@@ -364,27 +364,27 @@
    "ru": "Провайдеры чата",
    "id": "Penyedia obrolan"
   },
-  "Chat with Google AI, OpenAI or OpenRouter instead of Claude: add a key here, then click the model name above the chat box to switch provider and model. Keys stay in the system keychain. These providers get no web search and no tools: they can answer, never act on this computer.": {
-   "zh-Hans": "用 Google AI、OpenAI 或 OpenRouter 代替 Claude 聊天：在这里添加密钥，然后点击聊天框上方的模型名称来切换服务商和模型。密钥保存在系统钥匙串中。这些服务商没有网页搜索和工具：它们只能回答，绝不会在这台电脑上执行操作。",
-   "hi": "Claude की जगह Google AI, OpenAI या OpenRouter से चैट करें: यहाँ एक कुंजी जोड़ें, फिर प्रदाता और मॉडल बदलने के लिए चैट बॉक्स के ऊपर मॉडल के नाम पर क्लिक करें। कुंजियाँ सिस्टम कीचेन में रहती हैं। इन प्रदाताओं को न वेब सर्च मिलता है न टूल: वे जवाब दे सकते हैं, इस कंप्यूटर पर कभी कुछ नहीं करते।",
-   "es": "Chatea con Google AI, OpenAI u OpenRouter en lugar de Claude: añade una clave aquí y luego haz clic en el nombre del modelo encima del cuadro de chat para cambiar de proveedor y modelo. Las claves se quedan en el llavero del sistema. Estos proveedores no tienen búsqueda web ni herramientas: pueden responder, nunca actuar en este equipo.",
-   "ar": "دردش مع Google AI أو OpenAI أو OpenRouter بدلًا من Claude: أضف مفتاحًا هنا، ثم انقر على اسم النموذج فوق مربع الدردشة لتبديل المزوّد والنموذج. تبقى المفاتيح في سلسلة مفاتيح النظام. لا يحصل هؤلاء المزوّدون على بحث الويب ولا على الأدوات: يمكنهم الإجابة، ولا يتصرفون أبدًا على هذا الحاسوب.",
-   "fr": "Discute avec Google AI, OpenAI ou OpenRouter à la place de Claude : ajoute une clé ici, puis clique sur le nom du modèle au-dessus de la zone de chat pour changer de fournisseur et de modèle. Les clés restent dans le trousseau du système. Ces fournisseurs n'ont ni recherche web ni outils : ils peuvent répondre, jamais agir sur cet ordinateur.",
-   "bn": "Claude-এর বদলে Google AI, OpenAI বা OpenRouter-এর সঙ্গে চ্যাট করুন: এখানে একটি কী যোগ করুন, তারপর প্রদানকারী ও মডেল বদলাতে চ্যাট বক্সের উপরে মডেলের নামে ক্লিক করুন। কী সিস্টেম কীচেইনে থাকে। এই প্রদানকারীরা ওয়েব সার্চ বা টুল পায় না: তারা উত্তর দিতে পারে, এই কম্পিউটারে কখনো কিছু করে না।",
-   "pt-BR": "Converse com Google AI, OpenAI ou OpenRouter em vez do Claude: adicione uma chave aqui e clique no nome do modelo acima da caixa de chat para trocar de provedor e de modelo. As chaves ficam no chaveiro do sistema. Esses provedores não têm busca na web nem ferramentas: podem responder, nunca agir neste computador.",
-   "ru": "Общайтесь с Google AI, OpenAI или OpenRouter вместо Claude: добавьте ключ здесь, затем нажмите на название модели над полем чата, чтобы сменить провайдера и модель. Ключи хранятся в системной связке ключей. У этих провайдеров нет веб-поиска и инструментов: они могут отвечать, но никогда не действуют на этом компьютере.",
-   "id": "Mengobrol dengan Google AI, OpenAI, atau OpenRouter sebagai ganti Claude: tambahkan kunci di sini, lalu klik nama model di atas kotak obrolan untuk mengganti penyedia dan model. Kunci tetap di keychain sistem. Penyedia ini tidak punya pencarian web maupun alat: mereka bisa menjawab, tidak pernah bertindak di komputer ini."
+  "Chat with Google AI, OpenAI or OpenRouter instead of Claude: add a key here, then pick it under Chat above. Keys stay in the system keychain. These providers get no web search and no tools: they can answer, never act on this computer.": {
+   "zh-Hans": "用 Google AI、OpenAI 或 OpenRouter 代替 Claude 聊天：在这里添加密钥，然后在上方的“聊天”中选择它。密钥保存在系统钥匙串中。这些服务商没有网页搜索和工具：它们只能回答，绝不会在这台电脑上执行操作。",
+   "hi": "Claude की जगह Google AI, OpenAI या OpenRouter से चैट करें: यहाँ एक कुंजी जोड़ें, फिर ऊपर चैट में उसे चुनें। कुंजियाँ सिस्टम कीचेन में रहती हैं। इन प्रदाताओं को न वेब सर्च मिलता है न टूल: वे जवाब दे सकते हैं, इस कंप्यूटर पर कभी कुछ नहीं करते।",
+   "es": "Chatea con Google AI, OpenAI u OpenRouter en lugar de Claude: añade una clave aquí y luego elígelo arriba, en Chat. Las claves se quedan en el llavero del sistema. Estos proveedores no tienen búsqueda web ni herramientas: pueden responder, nunca actuar en este equipo.",
+   "ar": "دردش مع Google AI أو OpenAI أو OpenRouter بدلًا من Claude: أضف مفتاحًا هنا، ثم اختره من قسم الدردشة أعلاه. تبقى المفاتيح في سلسلة مفاتيح النظام. لا يحصل هؤلاء المزوّدون على بحث الويب ولا على الأدوات: يمكنهم الإجابة، ولا يتصرفون أبدًا على هذا الحاسوب.",
+   "fr": "Discute avec Google AI, OpenAI ou OpenRouter à la place de Claude : ajoute une clé ici, puis choisis-le plus haut, dans Chat. Les clés restent dans le trousseau du système. Ces fournisseurs n'ont ni recherche web ni outils : ils peuvent répondre, jamais agir sur cet ordinateur.",
+   "bn": "Claude-এর বদলে Google AI, OpenAI বা OpenRouter-এর সঙ্গে চ্যাট করুন: এখানে একটি কী যোগ করুন, তারপর উপরে চ্যাট অংশে সেটি বেছে নিন। কী সিস্টেম কীচেইনে থাকে। এই প্রদানকারীরা ওয়েব সার্চ বা টুল পায় না: তারা উত্তর দিতে পারে, এই কম্পিউটারে কখনো কিছু করে না।",
+   "pt-BR": "Converse com Google AI, OpenAI ou OpenRouter em vez do Claude: adicione uma chave aqui e escolha-o acima, em Chat. As chaves ficam no chaveiro do sistema. Esses provedores não têm busca na web nem ferramentas: podem responder, nunca agir neste computador.",
+   "ru": "Общайтесь с Google AI, OpenAI или OpenRouter вместо Claude: добавьте ключ здесь, затем выберите его выше, в разделе «Чат». Ключи хранятся в системной связке ключей. У этих провайдеров нет веб-поиска и инструментов: они могут отвечать, но никогда не действуют на этом компьютере.",
+   "id": "Mengobrol dengan Google AI, OpenAI, atau OpenRouter sebagai ganti Claude: tambahkan kunci di sini, lalu pilih di bagian Obrolan di atas. Kunci tetap di keychain sistem. Penyedia ini tidak punya pencarian web maupun alat: mereka bisa menjawab, tidak pernah bertindak di komputer ini."
   },
-  "Chat with a model you run yourself: Ollama or LM Studio (leave the address empty for the usual one on this computer), or any server that speaks the OpenAI API, such as vLLM or llama.cpp. Once connected, pick it above the chat box.": {
-   "zh-Hans": "与你自己运行的模型聊天：Ollama 或 LM Studio（地址留空即使用本机的默认地址），或任何兼容 OpenAI API 的服务器，例如 vLLM 或 llama.cpp。连接后，在聊天框上方选择它。",
-   "hi": "अपने चलाए मॉडल से चैट करें: Ollama या LM Studio (इस कंप्यूटर के सामान्य पते के लिए पता खाली छोड़ें), या OpenAI API बोलने वाला कोई भी सर्वर, जैसे vLLM या llama.cpp। कनेक्ट होने के बाद, उसे चैट बॉक्स के ऊपर चुनें।",
-   "es": "Chatea con un modelo que ejecutas tú mismo: Ollama o LM Studio (deja la dirección vacía para usar la habitual en este equipo), o cualquier servidor compatible con la API de OpenAI, como vLLM o llama.cpp. Una vez conectado, elígelo encima del cuadro de chat.",
-   "ar": "دردش مع نموذج تشغّله بنفسك: Ollama أو LM Studio (اترك العنوان فارغًا لاستخدام العنوان المعتاد على هذا الحاسوب)، أو أي خادم يتحدث واجهة OpenAI API مثل vLLM أو llama.cpp. بعد الاتصال، اختره فوق مربع الدردشة.",
-   "fr": "Discute avec un modèle que tu fais tourner toi-même : Ollama ou LM Studio (laisse l'adresse vide pour celle habituelle sur cet ordinateur), ou tout serveur qui parle l'API d'OpenAI, comme vLLM ou llama.cpp. Une fois connecté, choisis-le au-dessus de la zone de chat.",
-   "bn": "নিজে চালানো মডেলের সঙ্গে চ্যাট করুন: Ollama বা LM Studio (এই কম্পিউটারের সাধারণ ঠিকানার জন্য ঠিকানা ফাঁকা রাখুন), অথবা OpenAI API বোঝে এমন যেকোনো সার্ভার, যেমন vLLM বা llama.cpp। সংযুক্ত হলে চ্যাট বক্সের উপরে সেটি বেছে নিন।",
-   "pt-BR": "Converse com um modelo que você mesmo executa: Ollama ou LM Studio (deixe o endereço vazio para usar o padrão neste computador), ou qualquer servidor compatível com a API da OpenAI, como vLLM ou llama.cpp. Depois de conectado, escolha-o acima da caixa de chat.",
-   "ru": "Общайтесь с моделью, которую запускаете сами: Ollama или LM Studio (оставьте адрес пустым, чтобы использовать обычный адрес на этом компьютере) или любой сервер с API OpenAI, например vLLM или llama.cpp. После подключения выберите его над полем чата.",
-   "id": "Mengobrol dengan model yang Anda jalankan sendiri: Ollama atau LM Studio (kosongkan alamat untuk alamat biasa di komputer ini), atau server apa pun yang mendukung API OpenAI, seperti vLLM atau llama.cpp. Setelah terhubung, pilih di atas kotak obrolan."
+  "Chat with a model you run yourself: Ollama or LM Studio (leave the address empty for the usual one on this computer), or any server that speaks the OpenAI API, such as vLLM or llama.cpp. Once connected, pick it under Chat above.": {
+   "zh-Hans": "与你自己运行的模型聊天：Ollama 或 LM Studio（地址留空即使用本机的默认地址），或任何兼容 OpenAI API 的服务器，例如 vLLM 或 llama.cpp。连接后，在上方的“聊天”中选择它。",
+   "hi": "अपने चलाए मॉडल से चैट करें: Ollama या LM Studio (इस कंप्यूटर के सामान्य पते के लिए पता खाली छोड़ें), या OpenAI API बोलने वाला कोई भी सर्वर, जैसे vLLM या llama.cpp। कनेक्ट होने के बाद, उसे ऊपर चैट में चुनें।",
+   "es": "Chatea con un modelo que ejecutas tú mismo: Ollama o LM Studio (deja la dirección vacía para usar la habitual en este equipo), o cualquier servidor compatible con la API de OpenAI, como vLLM o llama.cpp. Una vez conectado, elígelo arriba, en Chat.",
+   "ar": "دردش مع نموذج تشغّله بنفسك: Ollama أو LM Studio (اترك العنوان فارغًا لاستخدام العنوان المعتاد على هذا الحاسوب)، أو أي خادم يتحدث واجهة OpenAI API مثل vLLM أو llama.cpp. بعد الاتصال، اختره من قسم الدردشة أعلاه.",
+   "fr": "Discute avec un modèle que tu fais tourner toi-même : Ollama ou LM Studio (laisse l'adresse vide pour celle habituelle sur cet ordinateur), ou tout serveur qui parle l'API d'OpenAI, comme vLLM ou llama.cpp. Une fois connecté, choisis-le plus haut, dans Chat.",
+   "bn": "নিজে চালানো মডেলের সঙ্গে চ্যাট করুন: Ollama বা LM Studio (এই কম্পিউটারের সাধারণ ঠিকানার জন্য ঠিকানা ফাঁকা রাখুন), অথবা OpenAI API বোঝে এমন যেকোনো সার্ভার, যেমন vLLM বা llama.cpp। সংযুক্ত হলে উপরে চ্যাট অংশে সেটি বেছে নিন।",
+   "pt-BR": "Converse com um modelo que você mesmo executa: Ollama ou LM Studio (deixe o endereço vazio para usar o padrão neste computador), ou qualquer servidor compatível com a API da OpenAI, como vLLM ou llama.cpp. Depois de conectado, escolha-o acima, em Chat.",
+   "ru": "Общайтесь с моделью, которую запускаете сами: Ollama или LM Studio (оставьте адрес пустым, чтобы использовать обычный адрес на этом компьютере) или любой сервер с API OpenAI, например vLLM или llama.cpp. После подключения выберите его выше, в разделе «Чат».",
+   "id": "Mengobrol dengan model yang Anda jalankan sendiri: Ollama atau LM Studio (kosongkan alamat untuk alamat biasa di komputer ini), atau server apa pun yang mendukung API OpenAI, seperti vLLM atau llama.cpp. Setelah terhubung, pilih di bagian Obrolan di atas."
   },
   "Choose a model": {
    "zh-Hans": "选择模型",
@@ -946,17 +946,6 @@
    "pt-BR": "Na ilha aberta",
    "ru": "В открытом острове",
    "id": "Di pulau yang terbuka"
-  },
-  "In use": {
-   "zh-Hans": "使用中",
-   "hi": "उपयोग में",
-   "es": "En uso",
-   "ar": "قيد الاستخدام",
-   "fr": "Utilisé",
-   "bn": "ব্যবহৃত হচ্ছে",
-   "pt-BR": "Em uso",
-   "ru": "Используется",
-   "id": "Sedang dipakai"
   },
   "In use by another app": {
    "zh-Hans": "已被其他应用占用",
@@ -2190,17 +2179,6 @@
    "ru": "Солнечные очки",
    "id": "Kacamata hitam"
   },
-  "Switch provider or model": {
-   "zh-Hans": "切换服务商或模型",
-   "hi": "प्रदाता या मॉडल बदलें",
-   "es": "Cambiar de proveedor o modelo",
-   "ar": "تبديل المزوّد أو النموذج",
-   "fr": "Changer de fournisseur ou de modèle",
-   "bn": "প্রদানকারী বা মডেল বদলান",
-   "pt-BR": "Trocar de provedor ou modelo",
-   "ru": "Сменить провайдера или модель",
-   "id": "Ganti penyedia atau model"
-  },
   "That key can't be used in a shortcut.": {
    "zh-Hans": "这个键不能用于快捷键。",
    "hi": "उस कुंजी का शॉर्टकट में उपयोग नहीं हो सकता।",
@@ -2574,17 +2552,6 @@
    "pt-BR": "Use uma chave secreta (sk_live_…, não pk_live_…)",
    "ru": "Используйте секретный ключ (sk_live_…, а не pk_live_…)",
    "id": "Gunakan kunci rahasia (sk_live_…, bukan pk_live_…)"
-  },
-  "Use in chat": {
-   "zh-Hans": "在聊天中使用",
-   "hi": "चैट में उपयोग करें",
-   "es": "Usar en el chat",
-   "ar": "استخدامه في الدردشة",
-   "fr": "Utiliser dans le chat",
-   "bn": "চ্যাটে ব্যবহার করুন",
-   "pt-BR": "Usar no chat",
-   "ru": "Использовать в чате",
-   "id": "Pakai di obrolan"
   },
   "Used twice": {
    "zh-Hans": "重复使用",
@@ -3316,6 +3283,50 @@
    "pt-BR": "Os números vêm do Claude Code em um terminal: as sessões do app Claude para desktop não os informam.",
    "ru": "Данные поступают от Claude Code в терминале: сеансы в настольном приложении Claude их не передают.",
    "id": "Angka ini berasal dari Claude Code di terminal: sesi di aplikasi desktop Claude tidak melaporkannya."
+  },
+  "Switch model": {
+   "zh-Hans": "切换模型",
+   "hi": "मॉडल बदलें",
+   "es": "Cambiar de modelo",
+   "ar": "تبديل النموذج",
+   "fr": "Changer de modèle",
+   "bn": "মডেল বদলান",
+   "pt-BR": "Trocar de modelo",
+   "ru": "Сменить модель",
+   "id": "Ganti model"
+  },
+  "Provider": {
+   "zh-Hans": "服务商",
+   "hi": "प्रदाता",
+   "es": "Proveedor",
+   "ar": "المزوّد",
+   "fr": "Fournisseur",
+   "bn": "প্রদানকারী",
+   "pt-BR": "Provedor",
+   "ru": "Провайдер",
+   "id": "Penyedia"
+  },
+  "No key yet — add it below.": {
+   "zh-Hans": "还没有密钥——请在下方添加。",
+   "hi": "अभी कोई कुंजी नहीं — नीचे जोड़ें।",
+   "es": "Aún no hay clave: añádela abajo.",
+   "ar": "لا يوجد مفتاح بعد — أضفه أدناه.",
+   "fr": "Pas encore de clé — ajoute-la plus bas.",
+   "bn": "এখনো কোনো কী নেই — নিচে যোগ করুন।",
+   "pt-BR": "Ainda não há chave — adicione abaixo.",
+   "ru": "Ключа пока нет — добавьте его ниже.",
+   "id": "Belum ada kunci — tambahkan di bawah."
+  },
+  "Where the chat goes and which model answers. The model name above the chat box only switches between this provider's models.": {
+   "zh-Hans": "聊天发往哪里、由哪个模型回答。聊天框上方的模型名称只在此服务商的模型之间切换。",
+   "hi": "चैट कहाँ जाती है और कौन-सा मॉडल जवाब देता है। चैट बॉक्स के ऊपर मॉडल का नाम सिर्फ़ इसी प्रदाता के मॉडलों के बीच बदलता है।",
+   "es": "A dónde va el chat y qué modelo responde. El nombre del modelo encima del cuadro de chat solo cambia entre los modelos de este proveedor.",
+   "ar": "إلى أين تذهب الدردشة وأي نموذج يجيب. اسم النموذج فوق مربع الدردشة يبدّل فقط بين نماذج هذا المزوّد.",
+   "fr": "Où va le chat et quel modèle répond. Le nom du modèle au-dessus de la zone de chat ne change qu'entre les modèles de ce fournisseur.",
+   "bn": "চ্যাট কোথায় যায় আর কোন মডেল উত্তর দেয়। চ্যাট বক্সের উপরের মডেলের নাম শুধু এই প্রদানকারীর মডেলগুলোর মধ্যে বদলায়।",
+   "pt-BR": "Para onde vai o chat e qual modelo responde. O nome do modelo acima da caixa de chat só troca entre os modelos deste provedor.",
+   "ru": "Куда идёт чат и какая модель отвечает. Название модели над полем чата переключает только модели этого провайдера.",
+   "id": "Ke mana obrolan dikirim dan model mana yang menjawab. Nama model di atas kotak obrolan hanya berganti di antara model penyedia ini."
   }
  }
 }
