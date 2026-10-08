@@ -1,14 +1,14 @@
 // Drop zone, upload progress and the "what do you want to do with it" card —
 // ports of UploadView / UploadingView / ChooseView from IslandViewContent.swift.
 //
-// Sending a file by email is not in the Windows v1. `choose` offers asking about
-// the file and three study shortcuts. (The shelf takes files directly: drop one
-// while the shelf is open.)
+// Sending a file by email is not in the Windows v1, so `choose` offers the one
+// action the spec asks for: ask a question about it.
 
+import { UPLOAD_CHOICES } from "../core/study";
 import { h, clear } from "./dom";
 import { State } from "../core/state";
-import { UPLOAD_CHOICES } from "../core/study";
 import type { ViewActions, ViewHost } from "./views";
+import { N_, t, tl } from "../i18n/i18n";
 
 /** Dashed rounded rect drawn as SVG so the dashes can march like on macOS. */
 export function dashedFrame(): SVGSVGElement {
@@ -31,11 +31,11 @@ export function dashedFrame(): SVGSVGElement {
 
 export function buildUpload(): ViewHost {
   const frame = dashedFrame();
-  const title = h("div", { class: "drop-title", text: "Drop your files here" });
+  const title = h("div", { class: "drop-title", text: tl("Drop your files here") });
   const tags = h(
     "div",
     { class: "drop-tags" },
-    ...["PDF", "Images", "Code", "Docs"].map((t) => h("span", { text: t })),
+    ...[N_("PDF"), N_("Images"), N_("Code"), N_("Docs")].map((chip) => h("span", { text: tl(chip) })),
   );
   const card = h(
     "div",
@@ -72,8 +72,8 @@ export function buildUploading(): ViewHost {
       const done = State.uploadProgress >= 0.999;
       const pct = Math.round(State.uploadProgress * 100);
       label.textContent = done
-        ? `✓  ${State.droppedFile?.name ?? "File"}`
-        : `Uploading ${State.droppedFile?.name ?? "file"}`;
+        ? `✓  ${State.droppedFile?.name ?? t("File")}`
+        : t("Uploading {name}", { name: State.droppedFile?.name ?? t("file") });
       label.classList.toggle("done", done);
       percent.textContent = done ? "" : `${pct} %`;
       const w = State.uploadProgress * 526;
@@ -87,14 +87,14 @@ export function buildUploading(): ViewHost {
 
 export function buildChoose(actions: ViewActions): ViewHost {
   const title = h("div", { class: "title" });
-  const sub = h("div", { class: "sub", text: "What do you want to do with it?" });
+  const sub = h("div", { class: "sub", text: tl("What do you want to do with it?") });
   const row = h(
     "div",
     { class: "actions options" },
     ...UPLOAD_CHOICES.map((c, i) =>
       h("button", {
         class: i === 0 ? "btn primary" : "btn secondary",
-        text: c.label,
+        text: tl(c.label),
         onclick: () => actions.choose(c.id),
       }),
     ),
@@ -114,8 +114,8 @@ export function buildChoose(actions: ViewActions): ViewHost {
     sync() {
       clear(title);
       title.append(
-        h("b", { text: State.droppedFile?.name ?? "file" }),
-        document.createTextNode(" is ready."),
+        h("b", { text: State.droppedFile?.name ?? t("file") }),
+        document.createTextNode(t(" is ready.")),
       );
     },
   };

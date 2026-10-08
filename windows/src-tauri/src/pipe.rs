@@ -34,6 +34,7 @@ use tokio::sync::mpsc;
 
 use crate::island::WINDOW_LABEL;
 use crate::log;
+use crate::session_window;
 
 /// Slightly under coucou-hook's own 110 s wait, so we always answer first.
 const DECISION_TIMEOUT: Duration = Duration::from_secs(108);
@@ -154,12 +155,20 @@ pub fn start(app: AppHandle) {
 trait Relay: AsyncRead + AsyncWrite + Unpin {
     /// Ends the conversation once everything has been written.
     fn finish(&mut self) {}
+    /// The relay process on the other end, where the OS says.
+    fn client_pid(&self) -> Option<u32> {
+        None
+    }
 }
 
 #[cfg(windows)]
 impl Relay for NamedPipeServer {
     fn finish(&mut self) {
         let _ = self.disconnect();
+    }
+    fn client_pid(&self) -> Option<u32> {
+        use std::os::windows::io::AsRawHandle;
+        crate::platform::pipe_client_pid(self.as_raw_handle())
     }
 }
 
@@ -197,8 +206,15 @@ async fn handle(app: AppHandle, mut pipe: impl Relay) {
         .unwrap_or_default()
         .to_string();
 
+    note_session_window(&pipe, &payload, &event);
+    // Counts for the weekly recap — never the command, path or prompt itself.
+    crate::recap::observe(&app, &payload);
+
     if event != "PermissionRequest" {
-        log::line(format!("hook {event}"));
+        // The status line relay calls in with every Claude Code update: not log-worthy.
+        if event != "StatusLine" {
+            log::line(format!("hook {event}"));
+        }
         let _ = app.emit_to(WINDOW_LABEL, "hook", payload);
         pipe.finish();
         return;
@@ -210,6 +226,7 @@ async fn handle(app: AppHandle, mut pipe: impl Relay) {
         let pending = app.state::<Pending>();
         pending.0.lock().unwrap().insert(id.clone(), tx);
     }
+    crate::recap::note_request(&app, &id, &payload);
     payload["request_id"] = json!(id);
     log::line(format!("hook PermissionRequest id={id}"));
     let _ = app.emit_to(WINDOW_LABEL, "hook", payload);
@@ -224,6 +241,31 @@ async fn handle(app: AppHandle, mut pipe: impl Relay) {
         let _ = pipe.flush().await;
     }
     pipe.finish();
+}
+
+/// Finds, once per session, the window it runs in — see session_window.rs.
+///
+/// Only while the session is unknown, so the process snapshot is not taken on
+/// every event. The relay must still be running for its parents to be found:
+/// a permission request always is (it waits for us), a quick event may already
+/// have exited, and then a later event of the session tries again.
+fn note_session_window(pipe: &impl Relay, payload: &Value, event: &str) {
+    let Some(session) = payload.get("session_id").and_then(Value::as_str) else { return };
+    if event == "SessionEnd" {
+        session_window::forget(session);
+        return;
+    }
+    if session_window::known(session) {
+        return;
+    }
+    let Some(relay) = pipe.client_pid() else { return };
+    let ancestors = crate::platform::process_ancestors(relay);
+    // No ancestors: the relay was already gone, so try again next time. Some,
+    // but none with a window (a classic console): settled, VS Code it is.
+    if !ancestors.is_empty() {
+        let owner = crate::platform::first_with_window(&ancestors);
+        session_window::remember(session, owner.unwrap_or(session_window::NO_WINDOW));
+    }
 }
 
 /// Two waits: a short one for "the card is up", then the long one for a human.
@@ -306,7 +348,7 @@ pub fn answer(app: &AppHandle, request_id: &str, decision: &str) {
 /// Called when an option is picked for a question Claude Code asked. `answers`
 /// maps each question's text to the chosen label, which is the shape
 /// AskUserQuestion takes them in.
-pub fn answer_question(app: &AppHandle, request_id: &str, answers: &HashMap<String, String>) {
+pub fn answer_question(app: &AppHandle, request_id: &str, answers: &HashMap<String, serde_json::Value>) {
     log::line(format!("decision id={request_id} answered a question"));
     // One line: the relay reads up to the first newline.
     let line = json!({ "answers": answers }).to_string();

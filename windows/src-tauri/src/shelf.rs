@@ -9,7 +9,7 @@ use std::process::Command;
 
 use serde::Serialize;
 
-use crate::files;
+use crate::files::{self, DroppedFile};
 use crate::{platform, settings};
 
 /// The icon shown under the pointer while a file is dragged off the shelf.
@@ -85,8 +85,13 @@ pub fn list() -> Vec<ShelfEntry> {
     found.into_iter().map(|(_, e)| e).collect()
 }
 
-/// Puts a copy of `source` on the shelf.
+/// Puts a copy of `source` on the shelf. Like the inbox, the shelf only takes
+/// paths a real drop just delivered: the page names the path, and without this
+/// it could have any file the user can read copied.
 pub fn add(source: &str) -> Result<ShelfEntry, String> {
+    if !files::take_dropped(source) {
+        return Err("Only files dropped on the island can be put on the shelf.".into());
+    }
     let file = files::copy_into(&dir(), source)?;
     Ok(entry(Path::new(&file.path), file.size))
 }
@@ -147,6 +152,41 @@ pub fn paste() -> Result<usize, String> {
         return Err("Nothing to paste: the clipboard holds no text and no files.".into());
     }
     Ok(arrived)
+}
+
+/// What the chat takes when something other than text is pasted into it: the
+/// first copied file, or a copied picture (a screenshot), saved as a PNG. It
+/// lands in the inbox like a dropped file. None when the clipboard holds neither.
+pub fn clipboard_file() -> Result<Option<DroppedFile>, String> {
+    let inbox = files::inbox_dir();
+    platform::ensure_private_dir(&settings::local_dir()).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&inbox).map_err(|e| e.to_string())?;
+
+    let t = platform::local_time();
+    let name = format!(
+        "Pasted image {:04}-{:02}-{:02} {:02}.{:02}.{:02}.png",
+        t.year, t.month, t.day, t.hour, t.minute, t.second
+    );
+    let image = inbox.join(&name);
+    let out = powershell(
+        "[Console]::OutputEncoding = [Text.Encoding]::UTF8;          $f = Get-Clipboard -Format FileDropList;          if ($f) { 'F:' + @($f)[0].FullName }          else { $i = Get-Clipboard -Format Image;            if ($i) { $i.Save($env:COUCOU_OUT, [System.Drawing.Imaging.ImageFormat]::Png); 'I:' } }",
+        &[("COUCOU_OUT", image.as_os_str())],
+    )?;
+
+    for line in out.lines() {
+        let line = line.trim();
+        if let Some(source) = line.strip_prefix("F:") {
+            let file = files::copy_into(&inbox, source)?;
+            files::sweep_inbox();
+            return Ok(Some(file));
+        }
+        if line == "I:" && image.is_file() {
+            let size = std::fs::metadata(&image).map(|m| m.len()).unwrap_or(0);
+            files::sweep_inbox();
+            return Ok(Some(DroppedFile { name, path: image.to_string_lossy().to_string(), size }));
+        }
+    }
+    Ok(None)
 }
 
 /// Runs a fixed script. Anything that varies travels in the environment, never

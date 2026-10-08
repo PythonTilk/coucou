@@ -1,29 +1,48 @@
-// Chat through Claude Code instead of the API: one `claude -p` per turn, on the
-// account Claude Code is already signed in to. No key involved — a Claude
-// subscription is enough.
+// Chat through Claude Code instead of an API: one `claude -p` per turn, on the
+// account Claude Code is already signed in to. No key involved.
 //
-// Claude Code keeps the conversation itself; we only remember its session id and
-// resume it on the next turn.
+// One more provider for chat.rs, next to Anthropic's API and the others. Claude
+// Code keeps the conversation itself; we remember its session id and resume it
+// on the next turn (chat.rs knows when that session is still the whole story).
+//
+// Local to this build: upstream declined it (#113, #138).
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
-use crate::claude::{Chat, ChatContext, ChatReply, SYSTEM_PROMPT};
+use crate::chat::{self, Chat, ChatContext, ChatReply, ModelInfo};
 use crate::platform;
+
+/// `Settings::chat_provider` for this provider; matches src/core/providers.ts.
+pub const PROVIDER: &str = "claudecode";
+pub const DEFAULT_MODEL: &str = "claude-sonnet-5";
 
 /// A turn with a few web searches in it can take a while.
 const TIMEOUT: Duration = Duration::from_secs(180);
 /// Mochi can look things up and read a dropped file. Nothing that writes or runs.
 const TOOLS: &str = "WebSearch,WebFetch,Read";
-/// Tells coucou-hook that this `claude` is Mochi answering, not a session to show.
-const CHAT_MARKER: &str = "COUCOU_CHAT";
 
 const NOT_INSTALLED: &str =
     "Claude Code was not found. Install it, run `claude` once to sign in, then try again.";
+
+/// What the picker offers. Claude Code takes any model ID; these are the usual ones.
+pub fn models() -> Vec<ModelInfo> {
+    [
+        ("claude-opus-5-5", "Claude Opus 5.5"),
+        ("claude-opus-5", "Claude Opus 5"),
+        ("claude-sonnet-5-5", "Claude Sonnet 5.5"),
+        ("claude-sonnet-5", "Claude Sonnet 5"),
+        ("claude-haiku-4-5", "Claude Haiku 4.5"),
+        ("claude-fable-5-1", "Claude Fable 5.1"),
+    ]
+    .iter()
+    .map(|(id, label)| ModelInfo { id: id.to_string(), label: label.to_string() })
+    .collect()
+}
 
 /// Where the `claude` launcher is: on PATH, or where the native installer puts it.
 pub fn find_claude() -> Option<PathBuf> {
@@ -40,11 +59,18 @@ pub async fn send(
     context: Option<ChatContext>,
 ) -> Result<ChatReply, String> {
     let exe = find_claude().ok_or_else(|| NOT_INSTALLED.to_string())?;
-    let resume = chat.session();
+    let turn = chat.begin(PROVIDER);
+    let resume = chat.cli_session(&turn);
 
-    // File / window context rides along with the first message only, as with the API.
-    let context = if resume.is_none() { context.as_ref() } else { None };
-    let (prompt, add_dir) = build_prompt(&query, context);
+    // File / window context rides along with the first message only.
+    let context = context.filter(|_| turn.first);
+    let user_text = chat::plain_question(turn.first, context.as_ref(), &query);
+    let (mut prompt, add_dir) = build_prompt(&query, context.as_ref());
+    // Another provider answered the turns before this one: the new session is
+    // told what was said.
+    if resume.is_none() && !turn.history.is_empty() {
+        prompt = format!("{}\n\n{prompt}", transcript(&turn.history));
+    }
 
     // A folder of our own, so no project's CLAUDE.md leaks into Mochi's answers.
     let dir = platform::local_dir().join("chat");
@@ -52,7 +78,7 @@ pub async fn send(
     // A file rather than an argument: the prompt has newlines and punctuation
     // that a `.cmd` launcher would not survive.
     let system_prompt = dir.join("system-prompt.txt");
-    std::fs::write(&system_prompt, SYSTEM_PROMPT).map_err(|e| e.to_string())?;
+    std::fs::write(&system_prompt, chat::system_prompt(true)).map_err(|e| e.to_string())?;
 
     let args = build_args(model, &system_prompt, resume.as_deref(), add_dir.as_deref());
     let stdout = tauri::async_runtime::spawn_blocking(move || run(&exe, &args, &dir, &prompt))
@@ -60,10 +86,29 @@ pub async fn send(
         .map_err(|e| e.to_string())??;
 
     let (text, session) = parse_reply(&stdout)?;
-    if session.is_some() {
-        chat.set_session(session);
+    chat.commit(
+        &turn,
+        json!({ "role": "user", "content": user_text }),
+        json!({ "role": "assistant", "content": text }),
+        &user_text,
+        &text,
+    );
+    if let Some(id) = session {
+        chat.set_cli_session(&turn, id);
     }
     Ok(ChatReply { text })
+}
+
+/// The earlier turns as plain text, for a session that was not there for them.
+fn transcript(history: &[Value]) -> String {
+    let mut out = String::from("Earlier in this conversation:");
+    for turn in history {
+        let who = if turn["role"] == "assistant" { "You" } else { "User" };
+        if let Some(text) = turn["content"].as_str() {
+            out.push_str(&format!("\n\n{who}: {text}"));
+        }
+    }
+    out
 }
 
 fn build_args(
@@ -83,7 +128,8 @@ fn build_args(
         "--allowedTools",
         TOOLS,
         // None of the user's own hooks, plugins or MCP servers: this is Mochi,
-        // not one of their sessions, and it should start fast.
+        // not one of their sessions, and it should start fast. (No hooks also
+        // means the relay never shows this turn as a session on the island.)
         "--setting-sources",
         "",
         "--strict-mcp-config",
@@ -119,11 +165,7 @@ fn build_prompt(query: &str, context: Option<&ChatContext>) -> (String, Option<P
             (prompt, file.parent().map(Path::to_path_buf))
         }
         Some(ChatContext::Window { app_name, title, url }) => {
-            let mut text = format!("Context — App: {app_name}, Window: {title}");
-            if let Some(url) = url {
-                text.push_str(&format!(", URL: {url}"));
-            }
-            (format!("{text}\n\n{query}"), None)
+            (format!("{}\n\n{query}", chat::window_line(app_name, title, url.as_deref())), None)
         }
         None => (query.to_string(), None),
     }
@@ -134,7 +176,6 @@ fn run(exe: &Path, args: &[String], dir: &Path, prompt: &str) -> Result<String, 
     let mut cmd = Command::new(exe);
     cmd.args(args)
         .current_dir(dir)
-        .env(CHAT_MARKER, "1")
         // A key in the environment would be billed instead of the subscription.
         .env_remove("ANTHROPIC_API_KEY")
         .env_remove("ANTHROPIC_AUTH_TOKEN")
@@ -285,5 +326,42 @@ mod tests {
     fn output_that_is_not_json_is_reported() {
         assert!(parse_reply("boom").unwrap_err().contains("boom"));
         assert!(parse_reply("").unwrap_err().contains("signed in"));
+    }
+
+    #[test]
+    fn a_session_is_resumed_only_while_it_holds_the_whole_conversation() {
+        let chat = Chat::default();
+        let commit = |turn: &chat::Turn, provider_text: &str| {
+            chat.commit(
+                turn,
+                json!({ "role": "user", "content": "q" }),
+                json!({ "role": "assistant", "content": provider_text }),
+                "q",
+                provider_text,
+            )
+        };
+
+        // First turn: nothing to resume.
+        let first = chat.begin(PROVIDER);
+        assert_eq!(chat.cli_session(&first), None);
+        commit(&first, "a1");
+        chat.set_cli_session(&first, "s-1".into());
+
+        // Second turn with Claude Code: the session has seen it all.
+        let second = chat.begin(PROVIDER);
+        assert_eq!(chat.cli_session(&second), Some("s-1".to_string()));
+        commit(&second, "a2");
+        chat.set_cli_session(&second, "s-1".into());
+
+        // Another provider answers a turn: the session is now behind.
+        let other = chat.begin("openai");
+        commit(&other, "a3");
+        let back = chat.begin(PROVIDER);
+        assert_eq!(chat.cli_session(&back), None);
+        assert!(transcript(&back.history).contains("You: a3"));
+
+        // "New chat" forgets it too.
+        chat.reset();
+        assert_eq!(chat.cli_session(&chat.begin(PROVIDER)), None);
     }
 }

@@ -4,6 +4,7 @@ import { h, clear, dot } from "./dom";
 import { Bridge } from "../core/bridge";
 import { Focus, FOCUS_PRESETS, formatClock, formatMinutes } from "../core/focus";
 import type { ViewActions, ViewHost } from "./views";
+import { t } from "../i18n/i18n";
 
 const COLOURS = { idle: "#9398A1", focus: "#34D399", break: "#38BDF8" } as const;
 
@@ -99,7 +100,7 @@ export function buildFocus(actions: ViewActions): ViewHost {
         row.append(
           Focus.paused
             ? button("Resume", "primary", () => Focus.resume())
-            : button("Pause", "primary", () => Focus.pause()),
+            : button(t("Pause"), "primary", () => Focus.pause()),
           button(phase === "break" ? "Skip break" : "Stop", "secondary", () => Focus.reset()),
         );
         if (Focus.subject.trim()) row.append(h("span", { class: "sub", text: Focus.subject.trim() }));

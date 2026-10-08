@@ -23,24 +23,59 @@ pub fn inbox_dir() -> PathBuf {
     settings::local_dir().join("inbox")
 }
 
-pub fn ingest(source: &str) -> Result<DroppedFile, String> {
-    let dir = inbox_dir();
-    let file = copy_into(&dir, source)?;
-    sweep(&dir);
-    Ok(file)
+// ── Paths a real drop delivered ─────────────────────────────────────────────
+//
+// `ingest_file` is callable from the page, so on its own it would copy any file
+// the user can read (a script injected into the page could pull in ~/.ssh).
+// Only paths the OS just delivered through a real drop are accepted: WebView2's
+// drop objects on Windows (webview_drop.rs), Tauri's drag-drop window event
+// elsewhere (lib.rs). Each is good once, for a couple of minutes.
+
+const DROP_VALID_FOR: Duration = Duration::from_secs(120);
+const DROP_MAX_PENDING: usize = 64;
+
+static DROPPED: std::sync::Mutex<Vec<(String, std::time::Instant)>> = std::sync::Mutex::new(Vec::new());
+
+/// Records paths that came from a real drop.
+pub fn allow_dropped<I: IntoIterator<Item = String>>(paths: I) {
+    let mut list = DROPPED.lock().unwrap_or_else(|e| e.into_inner());
+    let now = std::time::Instant::now();
+    list.retain(|(_, at)| now.duration_since(*at) < DROP_VALID_FOR);
+    for p in paths {
+        list.push((p, now));
+    }
+    let excess = list.len().saturating_sub(DROP_MAX_PENDING);
+    list.drain(..excess);
 }
 
-/// Copies `source` into `dir` under its own name, never over a file that is
-/// already there.
-pub fn copy_into(dir: &Path, source: &str) -> Result<DroppedFile, String> {
+/// True (once) when `path` was delivered by a drop in the last couple of minutes.
+pub(crate) fn take_dropped(path: &str) -> bool {
+    let mut list = DROPPED.lock().unwrap_or_else(|e| e.into_inner());
+    let now = std::time::Instant::now();
+    list.retain(|(_, at)| now.duration_since(*at) < DROP_VALID_FOR);
+    match list.iter().position(|(p, _)| p == path) {
+        Some(i) => {
+            list.remove(i);
+            true
+        }
+        None => false,
+    }
+}
+
+pub fn ingest(source: &str) -> Result<DroppedFile, String> {
+    if !take_dropped(source) {
+        return Err(crate::i18n::t("Only files dropped on the island can be added."));
+    }
     let src = Path::new(source);
-    let meta = std::fs::metadata(src).map_err(|e| format!("cannot read {source}: {e}"))?;
+    let meta = std::fs::metadata(src)
+        .map_err(|e| crate::i18n::tf("Cannot read {path}: {error}", &[("path", source), ("error", &e.to_string())]))?;
     if meta.is_dir() {
-        return Err("Folders can't be dropped yet.".into());
+        return Err(crate::i18n::t("Folders can't be dropped yet."));
     }
 
+    let dir = inbox_dir();
     crate::platform::ensure_private_dir(&settings::local_dir()).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
     let name = src
         .file_name()
@@ -60,13 +95,14 @@ pub fn copy_into(dir: &Path, source: &str) -> Result<DroppedFile, String> {
         }
     }
 
-    std::fs::copy(src, &dest).map_err(|e| format!("cannot copy: {e}"))?;
+    std::fs::copy(src, &dest).map_err(|e| crate::i18n::tf("Cannot copy: {error}", &[("error", &e.to_string())]))?;
     // CopyFileEx carries the source's timestamps across, so a file last edited
     // three years ago would arrive already older than the sweep window and be
     // deleted on the spot. The inbox ages from when *we* copied it.
     if let Ok(file) = std::fs::File::options().write(true).open(&dest) {
         let _ = file.set_modified(SystemTime::now());
     }
+    sweep(&dir);
 
     Ok(DroppedFile {
         name,
@@ -75,63 +111,39 @@ pub fn copy_into(dir: &Path, source: &str) -> Result<DroppedFile, String> {
     })
 }
 
-/// A file handed over by its contents rather than its path — what WebView2 gives
-/// the page for a browser drag and drop, or a paste. Written into `dir` under
-/// its own name, never over a file that is already there.
-pub fn write_into(dir: &Path, name: &str, bytes: &[u8]) -> Result<DroppedFile, String> {
-    // Only the last component: a name must never steer the write elsewhere.
-    let name = Path::new(name)
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| "file".into());
-
+/// Copies `source` into `dir` under its own name, never over a file that is
+/// already there. For the shelf and for pasted files: the caller answers for
+/// `source` being a path the user really handed over.
+pub fn copy_into(dir: &Path, source: &str) -> Result<DroppedFile, String> {
+    let src = Path::new(source);
+    let meta = std::fs::metadata(src)
+        .map_err(|e| crate::i18n::tf("Cannot read {path}: {error}", &[("path", source), ("error", &e.to_string())]))?;
+    if meta.is_dir() {
+        return Err(crate::i18n::t("Folders can't be dropped yet."));
+    }
     crate::platform::ensure_private_dir(&settings::local_dir()).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
 
-    let as_path = Path::new(&name);
+    let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "file".into());
     let mut dest = dir.join(&name);
     if dest.exists() {
-        let stem = as_path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        let ext = as_path.extension().map(|s| format!(".{}", s.to_string_lossy())).unwrap_or_default();
+        let stem = src.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let ext = src.extension().map(|s| format!(".{}", s.to_string_lossy())).unwrap_or_default();
         if let Some(free) = (2..1000).map(|i| dir.join(format!("{stem} ({i}){ext}"))).find(|c| !c.exists()) {
             dest = free;
         }
     }
-    std::fs::write(&dest, bytes).map_err(|e| format!("cannot save: {e}"))?;
-
-    Ok(DroppedFile {
-        name,
-        path: dest.to_string_lossy().to_string(),
-        size: bytes.len() as u64,
-    })
-}
-
-/// Like `write_into`, for the inbox: the week-long sweep runs as on any drop.
-pub fn ingest_bytes(name: &str, bytes: &[u8]) -> Result<DroppedFile, String> {
-    let dir = inbox_dir();
-    let file = write_into(&dir, name, bytes)?;
-    sweep(&dir);
-    Ok(file)
-}
-
-/// Decodes the `encodeURIComponent` file name the page sends in a header.
-pub fn percent_decode(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(b) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
-                out.push(b);
-                i += 3;
-                continue;
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
+    std::fs::copy(src, &dest).map_err(|e| crate::i18n::tf("Cannot copy: {error}", &[("error", &e.to_string())]))?;
+    // Aged from when *we* copied it, as in `ingest`.
+    if let Ok(file) = std::fs::File::options().write(true).open(&dest) {
+        let _ = file.set_modified(SystemTime::now());
     }
-    String::from_utf8_lossy(&out).into_owned()
+    Ok(DroppedFile { name, path: dest.to_string_lossy().to_string(), size: meta.len() })
+}
+
+/// Sweeps the inbox after something was put there by other means than `ingest`.
+pub fn sweep_inbox() {
+    sweep(&inbox_dir());
 }
 
 /// Drops anything copied here more than a week ago. `ingest` stamps every copy
@@ -154,42 +166,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_file_name_from_the_page_is_decoded_and_cannot_leave_the_folder() {
-        assert_eq!(percent_decode("Skript%20%C3%9Cbung%203.pdf"), "Skript Übung 3.pdf");
-        assert_eq!(percent_decode("100%25.txt"), "100%.txt");
-        assert_eq!(percent_decode("odd%zz%2"), "odd%zz%2");
-
-        let tmp = std::env::temp_dir().join(format!("coucou-bytes-{}", std::process::id()));
-        let first = write_into(&tmp, "..\\..\\evil.txt", b"one").unwrap();
-        assert_eq!(first.name, "evil.txt");
-        assert_eq!(Path::new(&first.path).parent(), Some(tmp.as_path()));
-        // Same name again: kept apart, never overwritten.
-        let second = write_into(&tmp, "evil.txt", b"two").unwrap();
-        assert_ne!(first.path, second.path);
-        assert_eq!(std::fs::read(&first.path).unwrap(), b"one");
-        assert_eq!(std::fs::read(&second.path).unwrap(), b"two");
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
-
-    #[test]
     fn ingest_copies_and_never_overwrites() {
         let tmp = std::env::temp_dir().join(format!("coucou-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let source = tmp.join("note.txt");
         std::fs::write(&source, b"hello").unwrap();
 
+        let drop = |p: &Path| allow_dropped([p.to_string_lossy().to_string()]);
+        drop(&source);
         let first = ingest(source.to_str().unwrap()).unwrap();
         assert_eq!(first.name, "note.txt");
         assert_eq!(std::fs::read(&first.path).unwrap(), b"hello");
 
         // A second drop of the same name must not clobber the first copy.
         std::fs::write(&source, b"second").unwrap();
+        drop(&source);
         let second = ingest(source.to_str().unwrap()).unwrap();
         assert_ne!(first.path, second.path);
         assert_eq!(std::fs::read(&first.path).unwrap(), b"hello");
         assert_eq!(std::fs::read(&second.path).unwrap(), b"second");
 
         // Folders are refused rather than silently ignored.
+        drop(&tmp);
         assert!(ingest(tmp.to_str().unwrap()).is_err());
 
         // An ancient source must not arrive already older than the sweep window.
@@ -202,6 +200,7 @@ mod tests {
             .unwrap()
             .set_modified(long_ago)
             .unwrap();
+        drop(&old_source);
         let aged = ingest(old_source.to_str().unwrap()).unwrap();
         assert!(
             Path::new(&aged.path).exists(),
@@ -212,5 +211,25 @@ mod tests {
         let _ = std::fs::remove_file(&first.path);
         let _ = std::fs::remove_file(&second.path);
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+}
+
+#[cfg(test)]
+mod drop_tests {
+    use super::*;
+
+    // One test: the list is process-wide and tests run in parallel.
+    #[test]
+    fn only_a_dropped_path_is_ingested_once_and_the_list_stays_bounded() {
+        let p = "/tmp/coucou-test-not-dropped.txt".to_string();
+        assert!(ingest(&p).is_err(), "never dropped");
+        allow_dropped([p.clone()]);
+        assert!(take_dropped(&p));
+        assert!(!take_dropped(&p), "good once");
+
+        allow_dropped((0..200).map(|i| format!("/tmp/bounded-{i}")));
+        assert!(DROPPED.lock().unwrap().len() <= DROP_MAX_PENDING);
+        assert!(take_dropped("/tmp/bounded-199"));
+        assert!(!take_dropped("/tmp/bounded-0"));
     }
 }
