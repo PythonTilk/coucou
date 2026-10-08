@@ -127,3 +127,9 @@ export function tickMiniBots(dt: number) {
 }
 
 export const miniBotCount = () => live.size;
+
+/** A small Mochi is mid-gesture, not just idling: the island draws every frame for it. */
+export function miniBotsMoving(): boolean {
+  for (const mb of live.values()) if (mb.engine.moving) return true;
+  return false;
+}

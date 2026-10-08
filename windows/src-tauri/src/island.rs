@@ -5,7 +5,7 @@
 // centre of the main display inside a borderless, transparent, always-on-top
 // window that never takes focus.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
@@ -342,6 +342,7 @@ fn place(app: &AppHandle, pref: &str, lw: f64, lh: f64) {
     let _ = win.set_resizable(true);
     let _ = win.set_size(PhysicalSize::new(pw, ph));
     let _ = win.set_position(PhysicalPosition::new(x, y));
+    PLACED.fetch_add(1, Ordering::Relaxed);
     let (lx, ly) = logical_origin(&m);
     platform::pin_to_monitor(&win, lx, ly);
     // Moving across displays can rescale the window: re-assert the physical size.
@@ -460,6 +461,20 @@ fn current_screen_key(app: &AppHandle) -> Option<(i32, i32, u32, u32, u64)> {
     Some((p.x, p.y, size.width, size.height, m.scale_factor().to_bits()))
 }
 
+/// Counts every time the window is moved or resized, so the cursor poll knows
+/// when what it remembers of the window's place is out of date.
+static PLACED: AtomicU64 = AtomicU64::new(0);
+
+/// How far outside the window (logical px) the pointer is "far": see the poll.
+const FAR_DISTANCE: f64 = 160.0;
+/// While far, one tick in this many reports the pointer.
+const FAR_EVERY: u32 = 4;
+
+/// True when the pointer is well clear of the window, on any side.
+fn far_from(size: (f64, f64), x: f64, y: f64) -> bool {
+    x < -FAR_DISTANCE || x > size.0 + FAR_DISTANCE || y < -FAR_DISTANCE || y > size.1 + FAR_DISTANCE
+}
+
 /// Emits `cursor` (window-logical coordinates) at ~60 Hz while the island is
 /// visible. Parked on a condvar the rest of the time.
 pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
@@ -477,6 +492,9 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
             let mut was_down = left_button_down();
             let mut last = (f64::MIN, f64::MIN);
             let mut ticks: u32 = 0;
+            // The window's origin, scale and logical size, as last asked.
+            let mut frame: Option<(f64, f64, f64, (f64, f64))> = None;
+            let mut frame_placed = 0;
             while gate.is_active() {
                 std::thread::sleep(Duration::from_millis(period));
                 // Parked while we slept: the island is hidden, and nothing below
@@ -503,15 +521,25 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                 }
 
                 let Some(win) = window(&app) else { continue };
-                let Ok(origin) = win.outer_position() else { continue };
-                let scale = win.scale_factor().unwrap_or(1.0);
+                // Where the window is costs three trips to the main thread, and
+                // it only changes when we move it: asked again then, and with the
+                // display check as a safety net, not sixty times a second.
+                let placed = PLACED.load(Ordering::Relaxed);
+                if frame.is_none() || placed != frame_placed || ticks % screen_every == 0 {
+                    frame_placed = placed;
+                    frame = win.outer_position().ok().map(|origin| {
+                        let scale = win.scale_factor().unwrap_or(1.0);
+                        let size = match win.inner_size() {
+                            Ok(s) => (s.width as f64 / scale, s.height as f64 / scale),
+                            Err(_) => (PANEL_W, PANEL_H),
+                        };
+                        (origin.x as f64, origin.y as f64, scale, size)
+                    });
+                }
+                let Some((ox, oy, scale, size)) = frame else { continue };
                 let Some((cx, cy)) = cursor_physical() else { continue };
-                let x = (cx - origin.x as f64) / scale;
-                let y = (cy - origin.y as f64) / scale;
-                let size = match win.inner_size() {
-                    Ok(s) => (s.width as f64 / scale, s.height as f64 / scale),
-                    Err(_) => (PANEL_W, PANEL_H),
-                };
+                let x = (cx - ox) / scale;
+                let y = (cy - oy) / scale;
                 // Button edges are read before the stationary-cursor shortcut
                 // below: a click counts even when the pointer has stopped moving.
                 let down = left_button_down();
@@ -528,6 +556,13 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                     if outside_press(r, x, y) {
                         let _ = win.emit("outside-click", ());
                     }
+                }
+
+                // Far from the window with no button held, all the pointer does
+                // is turn Mochi's eyes: a quarter of the ticks is plenty for that,
+                // and spares the page a message for every pixel moved elsewhere.
+                if !down && far_from(size, x, y) && ticks % FAR_EVERY != 0 {
+                    continue;
                 }
 
                 if (x - last.0).abs() < 1.0 && (y - last.1).abs() < 1.0 {
@@ -615,7 +650,17 @@ pub fn set_ignore_cursor(app: &AppHandle, ignore: bool) {
 
 #[cfg(test)]
 mod press_tests {
-    use super::{outside_press, IslandRect};
+    use super::{far_from, outside_press, IslandRect};
+
+    #[test]
+    fn the_pointer_is_far_only_well_clear_of_the_window() {
+        let size = (400.0, 200.0);
+        assert!(!far_from(size, 200.0, 100.0));
+        assert!(!far_from(size, -100.0, 300.0));
+        assert!(far_from(size, -200.0, 100.0));
+        assert!(far_from(size, 200.0, 400.0));
+        assert!(far_from(size, 600.0, 10.0));
+    }
 
     #[test]
     fn a_press_counts_as_outside_only_off_the_drawn_island() {

@@ -148,6 +148,12 @@ whatever the interface language:
   others: each turn runs through the `claude` you have installed and signed in
   to, with web search and file reading only. Upstream declined this one on
   policy grounds (#113, #138); it is here by choice.
+- **Settings that fold** — the sections sit under four headings (Island,
+  Agents, Chat, Integrations) and each folds on its title; which ones are open
+  is remembered.
+- **Lighter at rest** — with nothing left but breathing or a bounce the island
+  draws 30 frames a second instead of the display's 90 or 120, and the cursor
+  poll no longer asks the window where it is sixty times a second.
 - **An outfit per pill** — the wardrobe dresses the pill that is selected and
   says whose it is; each pill keeps its own, and the pills' small Mochis wear
   theirs. The main pill keeps the outfit it had.

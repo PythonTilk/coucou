@@ -3294,6 +3294,28 @@
    "pt-BR": "Só um arquivo solto na ilha pode ser enviado com uma pergunta.",
    "ru": "С вопросом можно отправить только файл, перетащенный на остров.",
    "id": "Hanya file yang dijatuhkan ke pulau yang bisa dikirim bersama pertanyaan."
+  },
+  "Island": {
+   "zh-Hans": "灵动岛",
+   "hi": "आइलैंड",
+   "es": "Isla",
+   "ar": "الجزيرة",
+   "fr": "Île",
+   "bn": "আইল্যান্ড",
+   "pt-BR": "Ilha",
+   "ru": "Остров",
+   "id": "Pulau"
+  },
+  "The numbers come from Claude Code in a terminal: sessions in the Claude desktop app do not report them.": {
+   "zh-Hans": "这些数字来自终端中的 Claude Code：Claude 桌面应用中的会话不会报告它们。",
+   "hi": "ये आँकड़े टर्मिनल में चल रहे Claude Code से आते हैं: Claude डेस्कटॉप ऐप के सत्र इन्हें नहीं भेजते।",
+   "es": "Las cifras vienen de Claude Code en una terminal: las sesiones de la app de escritorio de Claude no las comunican.",
+   "ar": "تأتي الأرقام من Claude Code في الطرفية: جلسات تطبيق Claude لسطح المكتب لا ترسلها.",
+   "fr": "Les chiffres viennent de Claude Code dans un terminal : les sessions de l'app de bureau Claude ne les communiquent pas.",
+   "bn": "সংখ্যাগুলো টার্মিনালের Claude Code থেকে আসে: Claude ডেস্কটপ অ্যাপের সেশন এগুলো জানায় না।",
+   "pt-BR": "Os números vêm do Claude Code em um terminal: as sessões do app Claude para desktop não os informam.",
+   "ru": "Данные поступают от Claude Code в терминале: сеансы в настольном приложении Claude их не передают.",
+   "id": "Angka ini berasal dari Claude Code di terminal: sesi di aplikasi desktop Claude tidak melaporkannya."
   }
  }
 }

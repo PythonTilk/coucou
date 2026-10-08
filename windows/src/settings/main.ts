@@ -16,6 +16,7 @@ import {
 } from "../core/pills";
 import { h, clear } from "../views/dom";
 import { agentsSection } from "./agents";
+import { foldedGroups } from "./folding";
 import { colorDot } from "./colors";
 import { renderDiff, statusDot } from "./parts";
 import {
@@ -237,6 +238,7 @@ function claudeSection(status: HookStatus): HTMLElement {
  */
 const PLAN_SETTINGS_TEXT = {
   get claude() { return t("Shows your Claude plan usage (5-hour and weekly limits) in the island's header. Coucou adds a status line relay in ~/.claude/settings.json. If you already have a status line, it keeps working as before. Pro and Max plans only."); },
+  get claudeSource() { return t("The numbers come from Claude Code in a terminal: sessions in the Claude desktop app do not report them."); },
   get showClaude() { return t("Show in notch"); },
   get codex() { return t("Shows your Codex plan usage (weekly limit and free resets left) in the island's header. Coucou asks the Codex CLI (codex app-server) when the pill shows; nothing is installed. Codex must be signed in with ChatGPT."); },
   get showCodex() { return t("Show Codex plan in the notch"); },
@@ -282,6 +284,7 @@ function planSection(status: HookStatus): HTMLElement {
         class: "hint",
         text: PLAN_SETTINGS_TEXT.claude,
       }),
+      h("div", { class: "hint", text: PLAN_SETTINGS_TEXT.claudeSource }),
       h("div", { class: "row" }, h("label", { text: PLAN_SETTINGS_TEXT.showClaude }), sw),
       h("div", { class: "row" },
         h("label", { text: t("Relay") }),
@@ -1370,17 +1373,37 @@ async function render() {
   clear(root);
   root.append(
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
-    claudeSection(status),
-    agentsSection(agents),
-    planSection(status),
-    apiSection(hasKey),
-    claudeCodeChatSection(hasClaudeCode),
-    chatProvidersSection(chatKeys, keyChanged),
-    localSection(customKey),
-    activePillsSection(connected),
-    integrationsSection(present),
-    generalSection(),
-    shortcutsSection(shortcutReport),
+    ...foldedGroups([
+      {
+        title: t("Island"),
+        sections: [
+          ["general", generalSection()],
+          ["pills", activePillsSection(connected)],
+          ["shortcuts", shortcutsSection(shortcutReport)],
+        ],
+      },
+      {
+        title: t("Agents"),
+        sections: [
+          ["claude-code", claudeSection(status)],
+          ["agents", agentsSection(agents)],
+          ["plan", planSection(status)],
+        ],
+      },
+      {
+        title: t("Chat"),
+        sections: [
+          ["chat-claude", apiSection(hasKey)],
+          ["chat-claude-code", claudeCodeChatSection(hasClaudeCode)],
+          ["chat-providers", chatProvidersSection(chatKeys, keyChanged)],
+          ["chat-local", localSection(customKey)],
+        ],
+      },
+      {
+        title: t("Integrations"),
+        sections: [["integrations", integrationsSection(present)]],
+      },
+    ]),
     h("div", {
       class: "hint",
       text: t("No telemetry. Network requests only go to the services you configure yourself."),
