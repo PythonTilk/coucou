@@ -129,3 +129,38 @@ test("the per-frame season lookup follows the calendar day", () => {
   assert.equal(cache.get("bow", day(2026, 10, 1)), "bow");
   assert.equal(cache.get("auto", day(2026, 12, 2)), "santaHat");
 });
+
+// ── An outfit per pill (local to this build) ──────────────────────────────────
+
+test("the main pill wears mochiOutfit, any other pill what was picked for it", async () => {
+  const { outfitSelectionFor } = await import("../src/mochi/wardrobe.ts");
+  const settings = { mochiOutfit: "witchHat", pillOutfits: { integration_github: "santaHat", agent_x: "nonsense" } };
+  assert.equal(outfitSelectionFor("integration_claude", "integration_claude", settings), "witchHat");
+  assert.equal(outfitSelectionFor(null, "integration_claude", settings), "witchHat");
+  assert.equal(outfitSelectionFor("integration_github", "integration_claude", settings), "santaHat");
+  // Nothing picked, or something this build does not know: nothing worn.
+  assert.equal(outfitSelectionFor("integration_n8n", "integration_claude", settings), "none");
+  assert.equal(outfitSelectionFor("agent_x", "integration_claude", settings), "none");
+  // A settings file from before this build has no pillOutfits at all.
+  assert.equal(outfitSelectionFor("integration_github", "integration_claude", { mochiOutfit: "auto" }), "none");
+  // The main pill is whichever is chosen as main, not always VS Code.
+  assert.equal(outfitSelectionFor("agent_claude-desktop", "agent_claude-desktop", settings), "witchHat");
+});
+
+test("picking an outfit stores it for that pill only, and never touches what it was given", async () => {
+  const { withOutfit, outfitSelectionFor } = await import("../src/mochi/wardrobe.ts");
+  const before = { mochiOutfit: "auto", pillOutfits: { integration_github: "santaHat" } };
+  const main = withOutfit(before, "integration_claude", "integration_claude", "witchHat");
+  assert.equal(main.mochiOutfit, "witchHat");
+  assert.deepEqual(main.pillOutfits, { integration_github: "santaHat" });
+
+  const other = withOutfit(before, "integration_n8n", "integration_claude", "witchHat");
+  assert.equal(other.mochiOutfit, "auto");
+  assert.deepEqual(other.pillOutfits, { integration_github: "santaHat", integration_n8n: "witchHat" });
+  assert.equal(outfitSelectionFor("integration_n8n", "integration_claude", other), "witchHat");
+
+  // "none" is what a pill wears anyway: nothing is kept for it.
+  const bare = withOutfit(other, "integration_github", "integration_claude", "none");
+  assert.deepEqual(bare.pillOutfits, { integration_n8n: "witchHat" });
+  assert.deepEqual(before, { mochiOutfit: "auto", pillOutfits: { integration_github: "santaHat" } });
+});

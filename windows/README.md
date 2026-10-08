@@ -148,6 +148,9 @@ whatever the interface language:
   others: each turn runs through the `claude` you have installed and signed in
   to, with web search and file reading only. Upstream declined this one on
   policy grounds (#113, #138); it is here by choice.
+- **An outfit per pill** — the wardrobe dresses the pill that is selected and
+  says whose it is; each pill keeps its own, and the pills' small Mochis wear
+  theirs. The main pill keeps the outfit it had.
 - **Claude Desktop can be the main pill** — **Settings… → Active pills → Main
   tool**, on Windows: for when the Claude app's Code tab is where you work.
 - **Click anywhere else** folds the open island (a card waiting for an answer

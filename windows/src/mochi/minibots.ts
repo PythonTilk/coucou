@@ -2,13 +2,30 @@
 // Each canvas owns a BotEngine; the island's frame loop ticks every live one.
 
 import { BotEngine, hexToRGB } from "./engine";
-import type { AgentTask } from "../core/state";
+import { State, type AgentTask } from "../core/state";
+import { SeasonCache, outfitSelectionFor, type Outfit } from "./wardrobe";
 
 interface MiniBot {
   canvas: HTMLCanvasElement;
   engine: BotEngine;
+  /** The square the engine draws Mochi in, CSS pixels. */
   cssSize: number;
+  /** Extra canvas on each side and above, for an outfit (0 when it wears none). */
+  side: number;
+  overhang: number;
   taskId: string;
+  /** Wears its pill's outfit (the pills do; the compact grid is too small for hats). */
+  dressed: boolean;
+}
+
+/** Same proportions as the main Mochi's canvas (BOT_SIDE and BOT_OVERHANG in island.ts). */
+const SIDE_RATIO = 0.25;
+const OVERHANG_RATIO = 0.42;
+
+const seasons = new SeasonCache();
+
+function outfitOf(taskId: string): Outfit {
+  return seasons.get(outfitSelectionFor(taskId, State.mainPillId, State.settings));
 }
 
 const live = new Map<HTMLCanvasElement, MiniBot>();
@@ -22,7 +39,7 @@ const live = new Map<HTMLCanvasElement, MiniBot>();
  * `.frame(width: 22)`. Sizing the canvas itself to `bodySize` would shrink the
  * whole drawing to 60 %, which is what used to happen.
  */
-export function createMiniBot(task: AgentTask, bodySize: number): HTMLElement {
+export function createMiniBot(task: AgentTask, bodySize: number, dressed = false): HTMLElement {
   const slot = document.createElement("span");
   slot.className = "mini";
   slot.style.width = `${bodySize}px`;
@@ -30,11 +47,17 @@ export function createMiniBot(task: AgentTask, bodySize: number): HTMLElement {
 
   const canvas = document.createElement("canvas");
   const engineSize = bodySize / 0.6;
+  // A dressed Mochi needs room for a hat's brim and tip. The body stays where
+  // it was: the canvas grows around it, and is shifted up by half the room it
+  // gained above.
+  const side = dressed ? Math.round(engineSize * SIDE_RATIO) : 0;
+  const overhang = dressed ? Math.round(engineSize * OVERHANG_RATIO) : 0;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  canvas.width = Math.round(engineSize * dpr);
-  canvas.height = Math.round(engineSize * dpr);
-  canvas.style.width = `${engineSize}px`;
-  canvas.style.height = `${engineSize}px`;
+  canvas.width = Math.round((engineSize + side * 2) * dpr);
+  canvas.height = Math.round((engineSize + overhang) * dpr);
+  canvas.style.width = `${engineSize + side * 2}px`;
+  canvas.style.height = `${engineSize + overhang}px`;
+  canvas.style.marginTop = `${-overhang / 2}px`;
   slot.append(canvas);
 
   const engine = new BotEngine();
@@ -48,7 +71,12 @@ export function createMiniBot(task: AgentTask, bodySize: number): HTMLElement {
     engine.eyeOverrideUntil = Number.POSITIVE_INFINITY;
   }
 
-  live.set(canvas, { canvas, engine, cssSize: engineSize, taskId: task.id });
+  if (dressed) {
+    engine.particleOverhang = overhang;
+    engine.setOutfit(outfitOf(task.id), false);
+  }
+
+  live.set(canvas, { canvas, engine, cssSize: engineSize, side, overhang, taskId: task.id, dressed });
   return slot;
 }
 
@@ -69,6 +97,7 @@ export function syncMiniBotStates(tasks: AgentTask[]) {
     if (!task) continue;
     mb.engine.setState(task.state);
     mb.engine.bodyColor = hexToRGB(task.color);
+    if (mb.dressed) mb.engine.setOutfit(outfitOf(mb.taskId));
   }
 }
 
@@ -80,10 +109,10 @@ export function tickMiniBots(dt: number) {
     // The canvas was sized for the scale it was created at. If the display
     // scale has changed since (another monitor, a zoom), drawing at the new
     // scale into the old size cuts the Mochi off: size it again.
-    const px = Math.round(mb.cssSize * dpr);
-    if (mb.canvas.width !== px) {
-      mb.canvas.width = px;
-      mb.canvas.height = px;
+    const pxW = Math.round((mb.cssSize + mb.side * 2) * dpr);
+    if (mb.canvas.width !== pxW) {
+      mb.canvas.width = pxW;
+      mb.canvas.height = Math.round((mb.cssSize + mb.overhang) * dpr);
     }
     mb.engine.update(dt);
     // Cleared in device pixels, the whole canvas. At a fractional scale (150 %)
@@ -92,8 +121,8 @@ export function tickMiniBots(dt: number) {
     // piled up there frame after frame into a thin coloured line.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, mb.canvas.width, mb.canvas.height);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    mb.engine.draw(ctx, mb.cssSize, mb.cssSize);
+    ctx.setTransform(dpr, 0, 0, dpr, mb.side * dpr, 0);
+    mb.engine.draw(ctx, mb.cssSize, mb.cssSize + mb.overhang);
   }
 }
 

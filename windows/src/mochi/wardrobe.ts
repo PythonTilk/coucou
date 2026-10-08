@@ -61,6 +61,37 @@ export function parseOutfit(raw: unknown): OutfitSelection {
   return typeof raw === "string" && SELECTION_SET.has(raw) ? (raw as OutfitSelection) : DEFAULT_OUTFIT;
 }
 
+/**
+ * What a pill's Mochi wears (local to this build: upstream dresses the main
+ * Mochi only). The main pill wears `mochiOutfit`, as before, so it dresses for
+ * the season until told otherwise. Any other pill wears what was picked for
+ * it, and nothing until something is.
+ */
+export function outfitSelectionFor(
+  pillId: string | null | undefined,
+  mainPill: string,
+  settings: { mochiOutfit: string; pillOutfits?: Record<string, string> },
+): OutfitSelection {
+  if (!pillId || pillId === mainPill) return parseOutfit(settings.mochiOutfit);
+  const raw = settings.pillOutfits?.[pillId];
+  return typeof raw === "string" && SELECTION_SET.has(raw) ? (raw as OutfitSelection) : "none";
+}
+
+/** `settings` with `selection` picked for `pillId`. Never changes what it was given. */
+export function withOutfit<S extends { mochiOutfit: string; pillOutfits?: Record<string, string> }>(
+  settings: S,
+  pillId: string | null | undefined,
+  mainPill: string,
+  selection: OutfitSelection,
+): S {
+  if (!pillId || pillId === mainPill) return { ...settings, mochiOutfit: selection };
+  const pillOutfits = { ...(settings.pillOutfits ?? {}) };
+  // "none" is what a pill wears anyway: nothing is stored for it.
+  if (selection === "none") delete pillOutfits[pillId];
+  else pillOutfits[pillId] = selection;
+  return { ...settings, pillOutfits };
+}
+
 /** Easter Sunday of `year` (Meeus/Jones/Butcher), as [month 1–12, day]. */
 export function easterDate(year: number): [number, number] {
   const a = year % 19;

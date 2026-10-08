@@ -2514,3 +2514,15 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
 .drop-half.over .drop-half-body {
   color: var(--green-2);
 }
+
+/* ── Wardrobe: whose it is ──────────────────────────────────────────────── */
+
+.wardrobe-whose {
+  margin-left: 6px;
+  font: 500 12px var(--font);
+  color: var(--dim-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}

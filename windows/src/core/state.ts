@@ -153,6 +153,12 @@ export interface Settings {
    */
   pillColors: Record<string, string>;
   /**
+   * An outfit for a pill's Mochi other than the main one, by pill ID; the main
+   * pill's is `mochiOutfit`. Local to this build. Read it through
+   * `outfitSelectionFor` (mochi/wardrobe.ts).
+   */
+  pillOutfits: Record<string, string>;
+  /**
    * Interface language: "" follows the system (when Coucou has its language,
    * else English), or one of src/i18n's ten codes ("fr", "pt-BR", "zh-Hans"…).
    */
@@ -188,6 +194,7 @@ export const DEFAULT_SETTINGS: Settings = {
   shortcuts: {},
   mochiOutfit: DEFAULT_OUTFIT,
   pillColors: {},
+  pillOutfits: {},
   language: "",
 };
 

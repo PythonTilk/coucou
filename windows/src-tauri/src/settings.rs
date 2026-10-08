@@ -59,6 +59,10 @@ pub struct Settings {
     /// Kept as it comes, like `mochi_outfit`: src/core/pill-colors.ts reads
     /// whatever is not a colour as "no choice".
     pub pill_colors: BTreeMap<String, String>,
+    /// An outfit for a pill's Mochi other than the main one, by pill ID (the
+    /// main pill's is `mochi_outfit`). Local to this build. Kept as it comes;
+    /// src/mochi/wardrobe.ts reads what it does not know as "none".
+    pub pill_outfits: BTreeMap<String, String>,
     /// Interface language: "" follows the system, else one of i18n::LANGUAGES
     /// ("fr", "pt-BR", "zh-Hans"…). Kept as it comes, like `mochi_outfit`: a
     /// code this build doesn't know reads as "".
@@ -118,6 +122,7 @@ impl Default for Settings {
             shortcuts: Default::default(),
             mochi_outfit: "auto".into(),
             pill_colors: BTreeMap::new(),
+            pill_outfits: BTreeMap::new(),
             language: String::new(),
             desktop_mochi: DesktopMochiPref::default(),
         }
@@ -394,6 +399,7 @@ mod tests {
   "shortcuts": { "openChat": { "keys": "Ctrl+Shift+K", "enabled": false } },
   "mochiOutfit": "witchHat",
   "pillColors": { "integration_claude": "#2DD4BF" },
+  "pillOutfits": { "integration_github": "santaHat" },
   "language": "pt-BR",
   "desktopMochi": { "onDesktop": true, "spot": { "x": 1500.5, "y": -300.0, "space": "screen" } }
 }"##;
@@ -796,6 +802,7 @@ mod tests {
                 "shortcuts",
                 "mochiOutfit",
                 "pillColors",
+                "pillOutfits",
                 "language",
                 "desktopMochi",
             ]

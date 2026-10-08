@@ -18,7 +18,7 @@ import { State, type DropTarget } from "../core/state";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
-import { SeasonCache, parseOutfit } from "../mochi/wardrobe";
+import { SeasonCache, outfitSelectionFor, withOutfit } from "../mochi/wardrobe";
 import { UploadCanvas } from "../upload/canvas";
 import { USC, UploadSeq } from "../upload/sequence";
 import { closePlanCard, openPlanColor, planCardOpen } from "../views/usage";
@@ -244,8 +244,10 @@ export class Island {
       openSettingsWindow: () => void Bridge.openSettingsWindow(),
       blip: () => Sound.play("blip"),
       chooseOutfit: (selection) => {
-        if (parseOutfit(State.settings.mochiOutfit) === selection) return;
-        State.settings.mochiOutfit = selection;
+        // The wardrobe dresses the pill that is selected (local to this build).
+        const pill = State.focusId ?? State.mainPillId;
+        if (outfitSelectionFor(pill, State.mainPillId, State.settings) === selection) return;
+        State.settings = withOutfit(State.settings, pill, State.mainPillId, selection);
         void Bridge.saveSettings(State.settings);
         Sound.play("pop");
         this.engine.triggerEmote("proud");
@@ -1172,10 +1174,12 @@ export class Island {
     // the wardrobe is open (BotCanvasView.showOutfit, macOS).
     // In the wardrobe the hovered outfit swaps in at once, without the drop-in.
     const inWardrobe = State.mode === "expanded" && State.view === "wardrobe";
-    const mainFocused = State.focusId == null || State.focusId === State.mainPillId;
-    const showOutfit = mainFocused || State.mode !== "expanded" || inWardrobe;
-    const outfit = State.wardrobePreview ?? this.seasons.get(parseOutfit(State.settings.mochiOutfit));
-    this.engine.setOutfit(showOutfit ? outfit : "none", !inWardrobe);
+    // Local to this build: every pill has an outfit of its own, and the big
+    // Mochi wears the selected pill's. Folded away, he is the main pill's Mochi.
+    const pill = State.mode === "expanded" ? (State.focusId ?? State.mainPillId) : State.mainPillId;
+    const outfit =
+      State.wardrobePreview ?? this.seasons.get(outfitSelectionFor(pill, State.mainPillId, State.settings));
+    this.engine.setOutfit(outfit, !inWardrobe);
 
     this.engine.update(dt);
     ctx.setTransform(dpr, 0, 0, dpr, BOT_SIDE * dpr, 0);
