@@ -147,6 +147,9 @@ export const Bridge = {
     callOrThrow<LocalServer>("local_connect", { provider, url }),
   /** Copies a dropped file into the inbox. */
   ingestFile: (path: string) => callOrThrow<DroppedFile>("ingest_file", { path }),
+  /** Whether the Claude Code chat provider has a `claude` to run. */
+  claudeCliPresent: () => call<boolean>("claude_cli_present"),
+
   // ── Shelf ─────────────────────────────────────────────────────────────────
   shelfList: () => call<ShelfItem[]>("shelf_list"),
   /** Parks a copy of a file that was just dropped. */

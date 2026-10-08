@@ -473,6 +473,12 @@ fn ingest_file(path: String) -> Result<DroppedFile, String> {
     files::ingest(&path)
 }
 
+/// Whether the Claude Code chat provider has a `claude` to run (Settings shows it).
+#[tauri::command]
+fn claude_cli_present() -> bool {
+    claude_cli::find_claude().is_some()
+}
+
 // ── Shelf ─────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -739,6 +745,7 @@ pub fn run() {
             shelf_copy,
             shelf_drag_icon,
             clipboard_file,
+            claude_cli_present,
             secret_present,
             secret_set,
             secret_clear,

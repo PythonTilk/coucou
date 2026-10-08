@@ -398,6 +398,73 @@ function apiSection(hasKey: boolean): HTMLElement {
   );
 }
 
+// ── Claude Code chat section (local to this build) ────────────────────────────
+
+const CLAUDE_CODE = "claudecode";
+const CLAUDE_CODE_MODELS: [string, string][] = [
+  ["claude-opus-5-5", "Claude Opus 5.5"],
+  ["claude-opus-5", "Claude Opus 5"],
+  ["claude-sonnet-5-5", "Claude Sonnet 5.5"],
+  ["claude-sonnet-5", "Claude Sonnet 5"],
+  ["claude-haiku-4-5", "Claude Haiku 4.5"],
+  ["claude-fable-5-1", "Claude Fable 5.1"],
+];
+
+/**
+ * The chat through Claude Code, on the account it is signed in to — the same
+ * provider the chat's model picker offers as "Claude Code" (claude_cli.rs).
+ * Here it can be switched on and given a model without opening the chat.
+ */
+function claudeCodeChatSection(found: boolean): HTMLElement {
+  const dot = statusDot(found);
+  const state = h("div", {
+    class: "hint",
+    text: found
+      ? "Chat through Claude Code, on the account it is signed in to: no API key, and it counts against your Claude plan. Mochi gets web search and can read a dropped file, nothing else."
+      : "Claude Code was not found. Install it and run `claude` once to sign in, then reopen Settings.",
+  });
+
+  const use = h("button", {}) as HTMLButtonElement;
+  const drawUse = () => {
+    const inUse = settings.chatProvider === CLAUDE_CODE;
+    use.textContent = inUse ? CHAT_STRINGS.inUse : CHAT_STRINGS.useInChat;
+    use.className = inUse ? "primary" : "";
+    use.title = inUse ? "Click to go back to the Anthropic API key" : "";
+  };
+  use.addEventListener("click", () => {
+    settings.chatProvider = settings.chatProvider === CLAUDE_CODE ? "anthropic" : CLAUDE_CODE;
+    void save();
+    drawUse();
+  });
+  drawUse();
+
+  const current = settings.chatModels[CLAUDE_CODE] || "claude-sonnet-5";
+  const model = h("select", {}) as HTMLSelectElement;
+  for (const [id, label] of CLAUDE_CODE_MODELS) model.append(h("option", { value: id, text: label }));
+  // A model set by hand, or picked from a list that has moved on, stays selectable.
+  if (!CLAUDE_CODE_MODELS.some(([id]) => id === current)) {
+    model.append(h("option", { value: current, text: current }));
+  }
+  model.value = current;
+  model.addEventListener("change", () => {
+    settings.chatModels = { ...settings.chatModels, [CLAUDE_CODE]: model.value };
+    void save();
+  });
+
+  return h(
+    "section",
+    {},
+    h("h2", {}, dot, h("span", { text: "Claude Code chat" })),
+    state,
+    h("div", { class: "row" }, h("label", { text: "Chat with Claude Code" }), use),
+    h("div", { class: "row" }, h("label", { text: t("Model") }), model),
+    h("div", {
+      class: "hint",
+      text: "The newest models may need an up-to-date Claude Code (`claude update`), and some are not included in every plan.",
+    }),
+  );
+}
+
 // ── Active pills section ──────────────────────────────────────────────────────
 
 /**
@@ -1295,6 +1362,7 @@ async function render() {
     chatKeys[key] = (await Bridge.secretPresent(key)) ?? false;
   }
   const customKey = (await Bridge.secretPresent(CUSTOM_SERVER_KEY)) ?? false;
+  const hasClaudeCode = (await Bridge.claudeCliPresent()) ?? false;
 
   declaredViews.length = 0;
   localRedraw = null;
@@ -1306,6 +1374,7 @@ async function render() {
     agentsSection(agents),
     planSection(status),
     apiSection(hasKey),
+    claudeCodeChatSection(hasClaudeCode),
     chatProvidersSection(chatKeys, keyChanged),
     localSection(customKey),
     activePillsSection(connected),
