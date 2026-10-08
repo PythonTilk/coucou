@@ -144,10 +144,14 @@ whatever the interface language:
   iCal subscription links (`webcal://` or `https://`): **Settings… → Integrations →
   Calendar → iCal subscription**. Ten minutes before something starts, the
   island shows itself. Times are taken to be in this computer's time zone.
-- **Claude Code as a chat provider** — in the chat's model picker, next to the
-  others: each turn runs through the `claude` you have installed and signed in
+- **Claude Code as a chat provider** — next to the others in **Settings… →
+  Chat**: each turn runs through the `claude` you have installed and signed in
   to, with web search and file reading only. Upstream declined this one on
   policy grounds (#113, #138); it is here by choice.
+- **The provider is picked in Settings** — **Settings… → Chat** holds the
+  provider chips and that provider's models in a full-width list. The model
+  name above the chat box only switches between the picked provider's models,
+  in a list that takes the island's full height while it is open.
 - **Settings that fold** — the sections sit under four headings (Island,
   Agents, Chat, Integrations) and each folds on its title; which ones are open
   is remembered.
@@ -262,8 +266,9 @@ Credential Manager**, never on disk and never in the interface — the island ca
 only ask whether a key exists. Same for every integration key.
 
 The chat also talks to **Google AI (Gemini)**, **OpenAI** and **OpenRouter**:
-add their keys in **Settings… → Chat providers**, then click the model name
-above the chat box to switch provider and model, as on the Mac. The model list
+add their keys in **Settings… → Chat providers**, then pick the provider and
+its model in **Settings… → Chat** (in this build; the model name above the chat
+box switches between that provider's models). The model list
 is fetched from the provider only once you pick it and it has a key. Switching
 mid-conversation carries the conversation over as plain text, so nothing in one
 provider's format is ever sent to another. These providers get no web search
