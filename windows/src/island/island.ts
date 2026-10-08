@@ -17,7 +17,7 @@ import { Sound } from "../core/sound";
 import { State, type DropTarget } from "../core/state";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
-import { createMiniBot, miniBotsMoving, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
+import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
 import { SeasonCache, outfitSelectionFor, withOutfit } from "../mochi/wardrobe";
 import { UploadCanvas } from "../upload/canvas";
 import { USC, UploadSeq } from "../upload/sequence";
@@ -1118,7 +1118,7 @@ export class Island {
     this.calm = busy && !settling &&
       this.botCx.settled && this.botCy.settled && this.botSize.settled &&
       !greetingActive && !UploadSeq.isActive && !viewAnimating &&
-      !this.engine.moving && !miniBotsMoving();
+      !this.engine.moving;
 
     if (busy) {
       requestAnimationFrame(this.frame);
