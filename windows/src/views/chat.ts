@@ -229,6 +229,11 @@ export function buildPrompt(onHeightChange: () => void, actions: ViewActions): V
   const picker = buildPicker(() => {
     body.classList.toggle("picking", picker.isOpen);
     drawModelButton();
+    // The list needs room: the island is as tall as it can be while it is open.
+    if (State.pickingModel !== picker.isOpen) {
+      State.pickingModel = picker.isOpen;
+      onHeightChange();
+    }
   });
   body.append(chipRow, log, picker.el, modelRow, bar);
 
