@@ -74,6 +74,10 @@ pub struct Settings {
     /// folds back (src/island/spotify.ts). Off by default: the island
     /// otherwise never opens for news that asks nothing.
     pub announce_songs: bool,
+    /// Mochi dances to the song's own beat, heard in what the computer plays
+    /// (beat.rs, Windows). Off by default: listening is for the user to ask
+    /// for. The page reads it (src/island/spotify.ts), not this side.
+    pub dance_to_beat: bool,
     /// Mochi on the desktop: whether he lives there, and his spot. Owned by
     /// the Rust side (desktop.rs) — what a webview sends back is ignored.
     pub desktop_mochi: DesktopMochiPref,
@@ -133,6 +137,7 @@ impl Default for Settings {
             pill_outfits: BTreeMap::new(),
             language: String::new(),
             announce_songs: false,
+            dance_to_beat: false,
             desktop_mochi: DesktopMochiPref::default(),
         }
     }
@@ -412,6 +417,7 @@ mod tests {
   "pillOutfits": { "integration_github": "santaHat" },
   "language": "pt-BR",
   "announceSongs": true,
+  "danceToBeat": true,
   "desktopMochi": { "onDesktop": true, "spot": { "x": 1500.5, "y": -300.0, "space": "screen" } }
 }"##;
 
@@ -568,6 +574,13 @@ mod tests {
         assert!(parse(CUSTOM.as_bytes()).unwrap().announce_songs);
         assert!(!parse(&custom_with("announceSongs", None)).unwrap().announce_songs);
         assert!(!Settings::default().announce_songs);
+    }
+
+    #[test]
+    fn a_file_from_before_the_beat_could_be_heard_is_not_listened_for() {
+        assert!(parse(CUSTOM.as_bytes()).unwrap().dance_to_beat);
+        assert!(!parse(&custom_with("danceToBeat", None)).unwrap().dance_to_beat);
+        assert!(!Settings::default().dance_to_beat);
     }
 
     #[test]
@@ -824,6 +837,7 @@ mod tests {
                 "pillOutfits",
                 "language",
                 "announceSongs",
+                "danceToBeat",
                 "desktopMochi",
             ]
         );

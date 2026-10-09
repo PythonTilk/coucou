@@ -2,6 +2,7 @@
 
 mod agent_hooks;
 mod agents;
+mod beat;
 mod calendar;
 mod chat;
 mod claude;
@@ -32,6 +33,7 @@ mod shelf;
 mod shortcuts;
 mod sounds;
 mod spotify;
+mod taktus;
 mod tray;
 #[cfg(windows)]
 mod webview_drop;
@@ -803,6 +805,8 @@ pub fn run() {
             spotify::spotify_control,
             spotify::spotify_open,
             spotify::spotify_installed,
+            spotify::spotify_hears,
+            spotify::spotify_dancing,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
