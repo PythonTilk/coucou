@@ -165,6 +165,33 @@ function starPath(x: CanvasRenderingContext2D, ro: number, ri: number) {
 
 const FONT = `system-ui, "Segoe UI Variable Text", "Segoe UI", sans-serif`;
 
+// ── Dance (BotEngine.applyDance, macOS) ──────────────────────────────────────
+
+/** The dance fades in over 0.3 s and out over 0.5 s. */
+export function stepDanceLevel(level: number, dancing: boolean, dt: number): number {
+  const target = dancing ? 1 : 0;
+  if (level < target) return Math.min(target, level + dt / 0.3);
+  if (level > target) return Math.max(target, level - dt / 0.5);
+  return level;
+}
+
+/**
+ * The 112-BPM bounce at `seconds`, for a body of radius R and a dance `level`
+ * (0…1): a sideways sway, a hop, a tilt, and a squash on landing.
+ */
+export function danceTransform(seconds: number, level: number, R: number) {
+  const beat = (seconds * 112) / 60;
+  const hop = Math.abs(Math.sin(Math.PI * beat));
+  const land = Math.pow(1 - hop, 6);
+  return {
+    dx: 0.08 * R * Math.sin(Math.PI * beat) * level,
+    dy: -0.2 * R * hop * level,
+    rotate: 0.1 * Math.sin(Math.PI * beat) * level,
+    sx: 1 + 0.045 * land * level,
+    sy: 1 - 0.06 * land * level,
+  };
+}
+
 // ── Engine ────────────────────────────────────────────────────────────────────
 
 export class BotEngine {
@@ -202,6 +229,10 @@ export class BotEngine {
 
   /** Extra canvas height above the body so hearts can fly out without clipping. */
   particleOverhang = 0;
+
+  /** Dancing to music; `dancingLevel` follows it, 0→1 in 0.3 s, 1→0 in 0.5 s. */
+  isDancing = false;
+  dancingLevel = 0;
 
   // Mouth spring (fraction of R)
   slotH = 0; slotHTarget = 0; slotHVel = 0; isChewing = false;
@@ -517,7 +548,10 @@ export class BotEngine {
 
   /** The motion a state repeats for as long as it lasts: breathing, a bounce, the z's. */
   get looping(): boolean {
-    return this.cfg.bounces || this.cfg.scans || this.cfg.breathes || this.cfg.zz || this.cfg.sweat || this.isMini;
+    return (
+      this.cfg.bounces || this.cfg.scans || this.cfg.breathes || this.cfg.zz || this.cfg.sweat || this.isMini ||
+      this.isDancing || this.dancingLevel > 0.001
+    );
   }
 
   /**
@@ -671,6 +705,8 @@ export class BotEngine {
     this.slotHVel += acc * dt;
     this.slotH = Math.max(0, this.slotH + this.slotHVel * dt);
 
+    this.dancingLevel = stepDanceLevel(this.dancingLevel, this.isDancing, dt);
+
     // Soft-part spring: lags behind head turns, hops and rolls (stiffness 60, damping 9).
     if (dt > 0) {
       const yawVel = (this.yaw - this.prevYaw) / dt;
@@ -725,6 +761,28 @@ export class BotEngine {
       default:
         this.miniNextBehavior = n + 3.0 + Math.random() * 2.0;
     }
+  }
+
+  // ── Dancing ─────────────────────────────────────────────────────────────────
+
+  setDancing(dancing: boolean) {
+    if (this.isDancing !== dancing) this.isDancing = dancing;
+  }
+
+  /**
+   * Applies the dance bounce and sway around the bottom of the body. Call it on
+   * a saved context, before draw(), with the same size (BotEngine.applyDance).
+   */
+  applyDance(x: CanvasRenderingContext2D, W: number, H: number) {
+    if (this.dancingLevel <= 0.001) return;
+    const R = W * 0.3;
+    const px = W / 2 + this.ox * R;
+    const py = H / 2 + this.particleOverhang / 2 + this.oy * R + R * 0.06 + R * 0.88;
+    const d = danceTransform(now(), this.dancingLevel, R);
+    x.translate(px + d.dx, py + d.dy);
+    x.rotate(d.rotate);
+    x.scale(d.sx, d.sy);
+    x.translate(-px, -py);
   }
 
   // ── Draw ────────────────────────────────────────────────────────────────────
@@ -879,6 +937,10 @@ export class BotEngine {
 
   private drawEyes(x: CanvasRenderingContext2D, body: Path2D, R: number, rx: number, ry: number) {
     let shape: EyeShape = this.eyeOverride ?? this.cfg.eye;
+    // Dancing: happy eyes in the calm states.
+    if (this.isDancing && this.dancingLevel > 0.15 && !this.isMini && (this.state === "idle" || this.state === "finished")) {
+      shape = "happy";
+    }
     if (this.morph > 0.5) {
       if (this.isChewing) shape = "happy";
       else if (this.slotHTarget > 0.05 || this.slotH > 0.1) shape = "cup";

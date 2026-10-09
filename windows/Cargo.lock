@@ -623,9 +623,10 @@ dependencies = [
 
 [[package]]
 name = "coucou"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "chrono",
+ "dbus",
  "gtk",
  "keyring",
  "libc",
@@ -642,11 +643,12 @@ dependencies = [
  "webview2-com",
  "windows 0.61.3",
  "windows-core 0.62.2",
+ "x11rb",
 ]
 
 [[package]]
 name = "coucou-hook"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "libc",
  "serde_json",

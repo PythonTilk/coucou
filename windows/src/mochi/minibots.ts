@@ -16,6 +16,8 @@ interface MiniBot {
   taskId: string;
   /** Wears its pill's outfit (the pills do; the compact grid is too small for hats). */
   dressed: boolean;
+  /** Asked every frame: whether this one dances (the music pill's, MiniBotCanvasView). */
+  dancing?: () => boolean;
 }
 
 /** Same proportions as the main Mochi's canvas (BOT_SIDE and BOT_OVERHANG in island.ts). */
@@ -39,7 +41,9 @@ const live = new Map<HTMLCanvasElement, MiniBot>();
  * `.frame(width: 22)`. Sizing the canvas itself to `bodySize` would shrink the
  * whole drawing to 60 %, which is what used to happen.
  */
-export function createMiniBot(task: AgentTask, bodySize: number, dressed = false): HTMLElement {
+export function createMiniBot(
+  task: AgentTask, bodySize: number, dressed = false, dancing?: () => boolean,
+): HTMLElement {
   const slot = document.createElement("span");
   slot.className = "mini";
   slot.style.width = `${bodySize}px`;
@@ -76,7 +80,7 @@ export function createMiniBot(task: AgentTask, bodySize: number, dressed = false
     engine.setOutfit(outfitOf(task.id), false);
   }
 
-  live.set(canvas, { canvas, engine, cssSize: engineSize, side, overhang, taskId: task.id, dressed });
+  live.set(canvas, { canvas, engine, cssSize: engineSize, side, overhang, taskId: task.id, dressed, dancing });
   return slot;
 }
 
@@ -114,6 +118,7 @@ export function tickMiniBots(dt: number) {
       mb.canvas.width = pxW;
       mb.canvas.height = Math.round((mb.cssSize + mb.overhang) * dpr);
     }
+    mb.engine.setDancing(mb.dancing?.() ?? false);
     mb.engine.update(dt);
     // Cleared in device pixels, the whole canvas. At a fractional scale (150 %)
     // the canvas is a whole number of pixels but `cssSize * dpr` is not, so
@@ -122,7 +127,10 @@ export function tickMiniBots(dt: number) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, mb.canvas.width, mb.canvas.height);
     ctx.setTransform(dpr, 0, 0, dpr, mb.side * dpr, 0);
+    ctx.save();
+    mb.engine.applyDance(ctx, mb.cssSize, mb.cssSize + mb.overhang);
     mb.engine.draw(ctx, mb.cssSize, mb.cssSize + mb.overhang);
+    ctx.restore();
   }
 }
 
