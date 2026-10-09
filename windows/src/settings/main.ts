@@ -887,7 +887,7 @@ const INTEGRATIONS: IntegrationDef[] = [
       key: "calendar-ics-url", label: "iCal subscription",
       placeholder: "webcal:// or https:// link — several: separate with spaces", secret: false,
     }] },
-  // Nothing to enter: Spotify is read over D-Bus (Linux only, see core/pills.ts).
+  // Nothing to enter: Spotify is read from Spotify itself (see core/pills.ts).
   { id: "integration_spotify", name: "Spotify", color: "#1DB954", fields: [] },
 ];
 
@@ -966,6 +966,13 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
       void Bridge.spotifyInstalled().then((ok) => {
         hint.textContent = ok === false ? t("Not installed") : "";
       });
+      rows.append(
+        h("div", { class: "row" },
+          h("label", { text: t("Announce new songs") }),
+          toggle(settings.announceSongs, (v) => { settings.announceSongs = v; void save(); }),
+        ),
+        h("div", { class: "hint", text: t("The island opens on each new song for a few seconds, then folds back.") }),
+      );
     }
 
     list.append(
