@@ -158,6 +158,11 @@ whatever the interface language:
   provider chips and that provider's models in a full-width list. The model
   name above the chat box only switches between the picked provider's models,
   in a list that takes the island's full height while it is open.
+- **Updates itself** — the fork's own workflow (`.github/workflows/fork-release.yml`)
+  builds and publishes each change as a signed release; **Settings… → Updates**
+  and the tray say when a newer build is there, and install it on a click.
+  Versions are upstream's with the build number on top (0.4.0 built for the
+  7th time is 0.4.7). Nothing is installed on its own.
 - **Settings that fold** — the sections sit under four headings (Island,
   Agents, Chat, Integrations) and each folds on its title; which ones are open
   is remembered.

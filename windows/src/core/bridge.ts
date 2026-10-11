@@ -346,6 +346,11 @@ export const Bridge = {
   /** Whether the Claude Code chat provider has a `claude` to run. */
   claudeCliPresent: () => call<boolean>("claude_cli_present"),
 
+  // Updates, from this build's own releases (updates.rs).
+  updateStatus: () => call<UpdateStatus>("update_status"),
+  updateCheck: () => call<UpdateStatus>("update_check"),
+  updateInstall: () => callOrThrow<void>("update_install"),
+
   // ── Shelf ─────────────────────────────────────────────────────────────────
   shelfList: () => call<ShelfItem[]>("shelf_list"),
   /** Parks a copy of a file that was just dropped. */
@@ -543,6 +548,17 @@ export interface HookPreview {
 async function callOrThrow<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (!IS_TAURI) throw new Error("not running inside Coucou");
   return invoke<T>(cmd, args);
+}
+
+/** What updates.rs knows: the running version, and a newer one when there is one. */
+export interface UpdateStatus {
+  current: string;
+  available: string | null;
+  notes: string | null;
+  /** Seconds since the epoch; 0 before the first look. */
+  checkedAt: number;
+  error: string | null;
+  installing: boolean;
 }
 
 export type BridgeEvent =

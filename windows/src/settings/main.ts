@@ -23,6 +23,7 @@ import {
 import { h, clear } from "../views/dom";
 import { agentsSection } from "./agents";
 import { foldedGroups } from "./folding";
+import { updatesSection } from "./updates";
 import { phoneSection } from "./phone";
 import { colorDot } from "./colors";
 import { renderDiff, statusDot } from "./parts";
@@ -1503,6 +1504,7 @@ async function render() {
           ["general", generalSection()],
           ["pills", activePillsSection(connected)],
           ["shortcuts", shortcutsSection(shortcutReport)],
+          ["updates", updatesSection(settings, toggle, () => void save())],
         ],
       },
       {

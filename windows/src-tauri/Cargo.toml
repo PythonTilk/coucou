@@ -20,6 +20,8 @@ tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
 # Dragging a file off the shelf and out of the window.
 tauri-plugin-drag = "2"
+# This build updates itself from the fork's own releases (updates.rs).
+tauri-plugin-updater = "2"
 # Local dates for the calendar pill.
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 serde = { version = "1", features = ["derive"] }

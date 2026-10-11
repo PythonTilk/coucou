@@ -60,5 +60,16 @@
         "installerHooks": "nsis/hooks.nsh"
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZCQ0NCNEJBMUQyNEE2MUMKUldRY3BpUWR1clRNYTRKaW5xeVdIdk9BcVN1R0VFbi9vYnozTXdyTUg0TzRGRWlEejNZdnUzWnoK",
+      "endpoints": [
+        "https://github.com/PythonTilk/coucou/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

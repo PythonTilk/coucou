@@ -78,6 +78,10 @@ pub struct Settings {
     /// (beat.rs, Windows). Off by default: listening is for the user to ask
     /// for. The page reads it (src/island/spotify.ts), not this side.
     pub dance_to_beat: bool,
+    /// Ask this build's own releases, a few times a day, whether a newer build
+    /// exists (updates.rs). Local to this build. On by default; installing is
+    /// always the user's click.
+    pub check_for_updates: bool,
     /// Mochi on the desktop: whether he lives there, and his spot. Owned by
     /// the Rust side (desktop.rs) — what a webview sends back is ignored.
     pub desktop_mochi: DesktopMochiPref,
@@ -166,6 +170,7 @@ impl Default for Settings {
             language: String::new(),
             announce_songs: false,
             dance_to_beat: false,
+            check_for_updates: true,
             desktop_mochi: DesktopMochiPref::default(),
             phone_link: false,
             phone_chat: false,
@@ -456,6 +461,7 @@ mod tests {
   "language": "pt-BR",
   "announceSongs": true,
   "danceToBeat": true,
+  "checkForUpdates": false,
   "desktopMochi": { "onDesktop": true, "spot": { "x": 1500.5, "y": -300.0, "space": "screen" } },
   "phoneLink": true,
   "phoneChat": true,
@@ -716,6 +722,13 @@ mod tests {
         assert!(parse(CUSTOM.as_bytes()).unwrap().announce_songs);
         assert!(!parse(&custom_with("announceSongs", None)).unwrap().announce_songs);
         assert!(!Settings::default().announce_songs);
+    }
+
+    #[test]
+    fn a_file_from_before_updates_checks_for_them() {
+        assert!(!parse(CUSTOM.as_bytes()).unwrap().check_for_updates);
+        assert!(parse(&custom_with("checkForUpdates", None)).unwrap().check_for_updates);
+        assert!(Settings::default().check_for_updates);
     }
 
     #[test]
@@ -980,6 +993,7 @@ mod tests {
                 "language",
                 "announceSongs",
                 "danceToBeat",
+                "checkForUpdates",
                 "desktopMochi",
                 "phoneLink",
                 "phoneChat",

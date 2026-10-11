@@ -179,6 +179,11 @@ export interface Settings {
    */
   danceToBeat: boolean;
   /**
+   * Ask this build's own releases, a few times a day, whether a newer build
+   * exists (Settings → Updates). Local to this build; installing is always a click.
+   */
+  checkForUpdates: boolean;
+  /**
    * The phone link for Coucou for Android is on. Rust owns it (only the switch in
    * Settings → Android phone turns it on): whatever the page sends back is ignored.
    */
@@ -225,6 +230,7 @@ export const DEFAULT_SETTINGS: Settings = {
   language: "",
   announceSongs: false,
   danceToBeat: false,
+  checkForUpdates: true,
 };
 
 type Listener = () => void;

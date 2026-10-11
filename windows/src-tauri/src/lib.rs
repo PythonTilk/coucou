@@ -36,6 +36,7 @@ mod sounds;
 mod spotify;
 mod taktus;
 mod tray;
+mod updates;
 #[cfg(windows)]
 mod webview_drop;
 
@@ -699,6 +700,24 @@ pub fn show_settings_window(app: &AppHandle) {
     let _ = win.set_focus();
 }
 
+/// What is known about updates, without asking the network.
+#[tauri::command]
+fn update_status(app: AppHandle, updates: State<updates::Updates>) -> updates::UpdateStatus {
+    updates.status(&app)
+}
+
+/// Asks this build's releases whether a newer build exists.
+#[tauri::command]
+async fn update_check(app: AppHandle) -> updates::UpdateStatus {
+    updates::check(&app).await
+}
+
+/// Installs the newer build. The app closes when the installer takes over.
+#[tauri::command]
+async fn update_install(app: AppHandle) -> Result<(), String> {
+    updates::install(&app).await
+}
+
 #[tauri::command]
 fn open_settings_window(app: AppHandle) {
     show_settings_window(&app);
@@ -722,7 +741,8 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
-        .plugin(tauri_plugin_drag::init());
+        .plugin(tauri_plugin_drag::init())
+        .plugin(tauri_plugin_updater::Builder::new().build());
     // Where no global shortcut can work, the plugin isn't even started.
     if platform::global_shortcuts_blocked().is_none() {
         builder = builder.plugin(shortcuts::plugin());
@@ -735,6 +755,7 @@ pub fn run() {
         })
         .manage(Pending::default())
         .manage(Chat::default())
+        .manage(updates::Updates::default())
         .manage(shortcuts::Registry::default())
         .manage(recap::load())
         .invoke_handler(tauri::generate_handler![
@@ -781,6 +802,9 @@ pub fn run() {
             shelf_drag_icon,
             clipboard_file,
             claude_cli_present,
+            update_status,
+            update_check,
+            update_install,
             secret_present,
             secret_set,
             secret_clear,
@@ -878,6 +902,7 @@ pub fn run() {
             gate.set_active(true);
             island::spawn_cursor_poll(handle.clone(), gate.clone());
             island::spawn_drag_watch(handle.clone(), gate.clone());
+            updates::spawn(handle.clone());
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             hooks::ensure_hook_exe(&handle);
