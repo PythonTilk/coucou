@@ -27,6 +27,18 @@ export const KNOWN_AGENTS: Record<string, KnownAgent> = {
  */
 export const APPROVAL_AGENTS = new Set(["codex", "copilot", "muse"]);
 
+/**
+ * Tags that are Claude Code itself under another pill: a session started from
+ * the Claude desktop app. The relay answers for it exactly as for Claude Code
+ * (its own `--agent` is empty; only the payload carries the tag), so its
+ * permission requests and its questions get their card here too.
+ *
+ * Local to this build. Upstream hands these back to the desktop app, as the
+ * Mac does — which, for someone who works in the desktop app, means no card
+ * ever comes up and a question goes unnoticed.
+ */
+export const CLAUDE_CODE_TAGS = new Set(["claude-desktop"]);
+
 /** Same rule as HookServer.validateAgent on macOS. "claude" is reserved. */
 export function validateAgent(raw: string | undefined): string | null {
   if (!raw || raw.length > 24 || raw === "claude") return null;

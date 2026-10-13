@@ -282,6 +282,8 @@ class AppState {
    * Mac #563). They wait their turn instead of being sent back to the terminal.
    */
   approvalQueue: ApprovalInfo[] = [];
+  /** When the card that is up came up (performance.now()): it takes no click at first. */
+  approvalShownAt = 0;
   /** The pill that was in front when the card came up; it comes back after. */
   focusBeforeApproval: string | null = null;
 
@@ -366,6 +368,8 @@ class AppState {
    * the pill that was there is remembered (HookServer.focusBeforeApproval).
    */
   beginApproval(info: ApprovalInfo) {
+    // The same request arriving twice does not start its guard again.
+    if (this.pendingApproval?.requestId !== info.requestId) this.approvalShownAt = performance.now();
     this.pendingApproval = info;
     this.isPinned = true;
     if (this.focusBeforeApproval == null) this.focusBeforeApproval = this.focusId;

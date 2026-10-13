@@ -15,6 +15,7 @@ import {
 } from "../core/layout";
 import { Sound } from "../core/sound";
 import { promoteNextApproval } from "./hooks";
+import { clickedRequest } from "../core/approval-guard";
 import { State, type DropTarget } from "../core/state";
 import { SPOTIFY_ID, islandDances } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
@@ -217,23 +218,25 @@ export class Island {
       openUrl: (url) => {
         if (url) void Bridge.openUrl(url);
       },
-      decide: (d) => {
-        const req = State.pendingApproval;
+      decide: (d, drawnFor) => {
+        // Only the request the button was drawn for, and only once its card
+        // has been up long enough to be read (core/approval-guard.ts).
+        const req = clickedRequest(State.pendingApproval, drawnFor, State.approvalShownAt, performance.now());
         void Bridge.log(`decide ${d} req=${req?.requestId ?? "none"}`);
         if (!req) return;
         Sound.play(d === "deny" ? "blip" : "approve");
         void Bridge.approvalDecision(req.requestId, d);
         this.closeApproval();
       },
-      answer: (answers) => {
-        const req = State.pendingApproval;
+      answer: (answers, drawnFor) => {
+        const req = clickedRequest(State.pendingApproval, drawnFor, State.approvalShownAt, performance.now());
         if (!req) return;
         Sound.play("approve");
         void Bridge.approvalAnswer(req.requestId, answers);
         this.closeApproval();
       },
-      answerInTerminal: () => {
-        const req = State.pendingApproval;
+      answerInTerminal: (drawnFor) => {
+        const req = clickedRequest(State.pendingApproval, drawnFor, State.approvalShownAt, performance.now());
         if (!req) return;
         Sound.play("blip");
         void Bridge.approvalDecline(req.requestId);

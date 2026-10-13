@@ -2,6 +2,7 @@
 // colours and wording are copied from the Swift views so both platforms read
 // identically.
 
+import { CLICK_GUARD_MS } from "../core/approval-guard";
 import { buildDrop } from "./drop";
 import { buildFocus } from "./focus";
 import { buildShelf } from "./shelf";
@@ -47,11 +48,15 @@ export interface ViewActions {
   /** The ↗ button: opens whatever the focused pill points at. */
   openTarget(): void;
   openUrl(url: string): void;
-  decide(d: "allow" | "deny"): void;
+  /**
+   * Answers the card. `drawnFor` is the request the clicked control was drawn
+   * for: a click counts only if that request is still the one that is up.
+   */
+  decide(d: "allow" | "deny", drawnFor: string | null): void;
   /** Answers the question Claude Code asked: question text → chosen label. */
-  answer(answers: Record<string, string | string[]>): void;
+  answer(answers: Record<string, string | string[]>, drawnFor: string | null): void;
   /** Hands the pending request back to the terminal. */
-  answerInTerminal(): void;
+  answerInTerminal(drawnFor: string | null): void;
   toggleSound(): void;
   setVolume(v: number): void;
   setAutoClose(seconds: number): void;
@@ -108,9 +113,11 @@ function agentWho(task: AgentTask | null, label: string): HTMLElement {
 
 /** The pill of the card that is up, under the project of the session that asks. */
 function askingTask(): AgentTask | null {
-  const task = State.focusTask;
-  const project = State.pendingApproval?.projectName;
-  return task && project ? { ...task, name: project } : task;
+  // The request's own pill, not whichever one has the front: the name on the
+  // card must be the agent that is asking, even if the focus has moved.
+  const req = State.pendingApproval;
+  const task = (req && State.tasks.find((t) => t.id === req.pillId)) ?? State.focusTask;
+  return task && req?.projectName ? { ...task, name: req.projectName } : task;
 }
 
 /** " · 1/3" while other requests wait behind the card, nothing otherwise. */
@@ -513,7 +520,6 @@ function buildEmpty(actions: ViewActions): ViewHost {
 // ── Approval ──────────────────────────────────────────────────────────────────
 
 /** How long a fresh permission card ignores clicks on its buttons. */
-const CLICK_GUARD_MS = 600;
 
 /**
  * The ⌃ in the corner of a waiting card: folds the island to its compact size
@@ -542,7 +548,7 @@ function buildApproval(actions: ViewActions): ViewHost {
   let shownAt = 0;
   const guarded = (d: "allow" | "deny") => () => {
     if (performance.now() - shownAt < CLICK_GUARD_MS) return;
-    actions.decide(d);
+    actions.decide(d, shownFor);
   };
   return {
     el,
@@ -595,7 +601,7 @@ function buildQuestion(actions: ViewActions): ViewHost {
     answers[question] = answer;
     picked = new Set();
     index += 1;
-    if (index >= total) actions.answer(answers);
+    if (index >= total) actions.answer(answers, requestId);
     else State.notify();
   };
 
@@ -630,7 +636,7 @@ function buildQuestion(actions: ViewActions): ViewHost {
       const asking = questions.length > 1
         ? t("is asking ({index} of {total})", { index: index + 1, total: questions.length })
         : t("is asking");
-      who.append(agentWho(State.focusTask, asking));
+      who.append(agentWho(askingTask(), `${asking}${waitingCount()}`));
       title.textContent = q.question;
       title.title = q.question;
 
@@ -664,7 +670,7 @@ function buildQuestion(actions: ViewActions): ViewHost {
           class: "link-btn",
           style: "color:#8e939c",
           text: tl("Answer in terminal"),
-          onclick: () => actions.answerInTerminal(),
+          onclick: () => actions.answerInTerminal(requestId),
         }),
       );
     },

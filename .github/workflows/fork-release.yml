@@ -8,12 +8,10 @@ name: Fork release
 # the key whose public half is in windows/src-tauri/tauri.conf.json. Without it
 # the build stops, and nothing is published.
 
+# Paused: it published installers under the Coucou name as public releases,
+# which LICENSE-ASSETS.md does not allow a fork to do. It runs by hand only
+# until it publishes to a private place instead.
 on:
-  push:
-    branches: [claude-code-backend-and-session-focus]
-    paths:
-      - 'windows/**'
-      - '.github/workflows/fork-release.yml'
   workflow_dispatch:
 
 permissions:
