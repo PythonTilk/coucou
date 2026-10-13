@@ -1118,6 +1118,9 @@ export class Island {
 
   // ── Frame loop ──────────────────────────────────────────────────────────────
 
+  /** An approval or question card was on screen at the last sync (see `syncDom`). */
+  private cardWasUp = false;
+
   /** Only looping motion is left, so frames are paced (see `frame`). */
   private calm = false;
 
@@ -1336,6 +1339,11 @@ export class Island {
   // ── DOM sync ────────────────────────────────────────────────────────────────
 
   private syncDom() {
+    // A card takes no click in its first moments on screen — counted from when
+    // it can be seen, so one that waited folded away starts again when it opens.
+    const cardUp = State.mode === "expanded" && (State.view === "approval" || State.view === "question");
+    if (cardUp && !this.cardWasUp) State.approvalShownAt = performance.now();
+    this.cardWasUp = cardUp;
     const expanded = State.mode === "expanded";
     const greetingActive = expanded && State.view === "greeting";
 

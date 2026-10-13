@@ -2,7 +2,7 @@
 // colours and wording are copied from the Swift views so both platforms read
 // identically.
 
-import { CLICK_GUARD_MS } from "../core/approval-guard";
+import { clickedRequest } from "../core/approval-guard";
 import { buildDrop } from "./drop";
 import { buildFocus } from "./focus";
 import { buildShelf } from "./shelf";
@@ -519,8 +519,6 @@ function buildEmpty(actions: ViewActions): ViewHost {
 
 // ── Approval ──────────────────────────────────────────────────────────────────
 
-/** How long a fresh permission card ignores clicks on its buttons. */
-
 /**
  * The ⌃ in the corner of a waiting card: folds the island to its compact size
  * and leaves the request waiting — nothing is answered (Mac #290). Opening the
@@ -545,19 +543,13 @@ function buildApproval(actions: ViewActions): ViewHost {
   // meant for the window underneath must not land on Allow. Clicks in the first
   // moments after a new request appears are ignored.
   let shownFor: string | null = null;
-  let shownAt = 0;
-  const guarded = (d: "allow" | "deny") => () => {
-    if (performance.now() - shownAt < CLICK_GUARD_MS) return;
-    actions.decide(d, shownFor);
-  };
+  const guarded = (d: "allow" | "deny") => () => actions.decide(d, shownFor);
   return {
     el,
     sync() {
-      const req = State.pendingApproval?.requestId ?? null;
-      if (req !== shownFor) {
-        shownFor = req;
-        shownAt = performance.now();
-      }
+      // The request these buttons now stand for. The island checks it against
+      // the card that is up, and how long that card has been on screen.
+      shownFor = State.pendingApproval?.requestId ?? null;
       clear(who);
       who.append(agentWho(askingTask(), `${t("needs permission")}${waitingCount()}`));
       // The whole point of approving here rather than in the terminal: this line
@@ -580,7 +572,7 @@ function buildApproval(actions: ViewActions): ViewHost {
 
 // ── Question ──────────────────────────────────────────────────────────────────
 
-function buildQuestion(actions: ViewActions): ViewHost {
+export function buildQuestion(actions: ViewActions): ViewHost {
   const who = h("div");
   const title = h("div", { class: "title question-text" });
   const row = h("div", { class: "actions options" });
@@ -596,6 +588,15 @@ function buildQuestion(actions: ViewActions): ViewHost {
   // The buttons are only rebuilt when what they show changes: rebuilding them
   // between a mouse-down and a mouse-up would swallow the click.
   let rowKey = "";
+
+  /**
+   * True when a click on this card counts: it is still the request these
+   * controls were drawn for, and it has been on screen long enough to be read.
+   * Asked before anything is noted, so a click that does not count cannot tick
+   * off a question on its way to being refused.
+   */
+  const live = () =>
+    clickedRequest(State.pendingApproval, requestId, State.approvalShownAt, performance.now()) != null;
 
   const next = (question: string, answer: string | string[], total: number) => {
     answers[question] = answer;
@@ -647,6 +648,7 @@ function buildQuestion(actions: ViewActions): ViewHost {
       for (const option of q.options) {
         const on = picked.has(option.label);
         const button = btn(option.label, on ? "primary" : "secondary", () => {
+          if (!live()) return;
           if (!q.multiSelect) {
             next(q.question, option.label, questions.length);
             return;
@@ -660,6 +662,7 @@ function buildQuestion(actions: ViewActions): ViewHost {
       }
       if (q.multiSelect) {
         const done = btn(tl("Done"), "primary", () => {
+          if (!live()) return;
           if (picked.size > 0) next(q.question, [...picked], questions.length);
         });
         if (picked.size === 0) done.classList.add("off");
