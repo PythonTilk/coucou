@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { calls, emit, sent } from "./tauri.mjs";
-import { registerHookHandlers } from "../src/island/hooks.ts";
+import { MAX_WAITING, registerHookHandlers, resetHookState } from "../src/island/hooks.ts";
 import { DEFAULT_SETTINGS, State } from "../src/core/state.ts";
 
 const CLAUDE = "integration_claude";
@@ -35,6 +35,7 @@ beforeEach(() => {
   State.paused = false;
   State.isPinned = false;
   State.pendingApproval = null;
+  resetHookState();
   State.settings = { ...DEFAULT_SETTINGS };
   State.loadIntegrationTasks();
 });
@@ -501,13 +502,119 @@ test("a request from Claude Code in Cursor's terminal goes on the Cursor pill", 
   assert.equal(task().state, "idle");
 });
 
-test("a second request never replaces the card: it goes back to the terminal", () => {
+test("a second request never replaces the card: it waits in line behind it", () => {
   ask("r1");
   ask("r2", { tool_name: "Bash", tool_input: { command: "ls" } });
   assert.equal(State.pendingApproval.requestId, "r1");
   assert.equal(State.pendingApproval.tool, "Write");
+  assert.deepEqual(State.approvalQueue.map((r) => r.requestId), ["r2"]);
+  // Both are taken as far as the relay is concerned; nothing goes back to a terminal.
+  assert.deepEqual(sent("approval_decline"), []);
+  assert.deepEqual(sent("approval_ack"), [{ requestId: "r1" }, { requestId: "r2" }]);
+});
+
+test("the next request in line takes the card when the one before it goes", () => {
+  ask("r1");
+  ask("r2", { session_id: "s2", tool_name: "Bash", tool_input: { command: "ls" } });
+  asked = [];
+  // r1's own turn ends: its card goes, r2's comes up at once.
+  hook({ hook_event_name: "Stop", session_id: "s1" });
+  assert.equal(State.pendingApproval.requestId, "r2");
+  assert.equal(State.pendingApproval.command, "Bash · ls");
+  assert.deepEqual(State.approvalQueue, []);
+  assert.equal(State.isPinned, true);
+  assert.ok(asked.includes("alert:approval"));
+  assert.deepEqual(sent("approval_decline"), [{ requestId: "r1" }]);
+});
+
+test("a request in line leaves it when its own turn ends, and the card stays", () => {
+  ask("r1");
+  ask("r2", { session_id: "s2" });
+  hook({ hook_event_name: "Stop", session_id: "s2" });
+  assert.equal(State.pendingApproval.requestId, "r1");
+  assert.deepEqual(State.approvalQueue, []);
   assert.deepEqual(sent("approval_decline"), [{ requestId: "r2" }]);
-  assert.deepEqual(sent("approval_ack"), [{ requestId: "r1" }]);
+});
+
+test("each request has its own 110 s, on the card or in line", () => {
+  ask("r1");
+  seconds(60);
+  ask("r2", { session_id: "s2" });
+  seconds(50);
+  // r1 has had its 110 s: the terminal took it back, r2 takes the card.
+  assert.equal(State.pendingApproval.requestId, "r2");
+  seconds(59);
+  assert.equal(State.pendingApproval.requestId, "r2");
+  seconds(1);
+  assert.equal(State.pendingApproval, null);
+  assert.equal(State.isPinned, false);
+  // Timed out, not declined: by then the relay has answered on its own.
+  assert.deepEqual(sent("approval_decline"), []);
+});
+
+test("the line holds four behind the card; one more goes back to its terminal", () => {
+  ask("r0");
+  for (let i = 1; i <= MAX_WAITING; i++) ask(`r${i}`, { session_id: `s${i}` });
+  assert.equal(State.approvalQueue.length, MAX_WAITING);
+  ask("late", { session_id: "s9" });
+  assert.equal(State.approvalQueue.length, MAX_WAITING);
+  assert.deepEqual(sent("approval_decline"), [{ requestId: "late" }]);
+});
+
+test("a request names its own project when the pill is shared", () => {
+  ask("r1");
+  assert.equal(State.pendingApproval.projectName, undefined);
+  ask("r2", { session_id: "s2", cwd: "C:\\Users\\me\\other" });
+  assert.equal(State.approvalQueue[0].projectName, "other");
+});
+
+// ── Several sessions behind one pill (sessions.ts, Mac #562) ──────────────────
+
+const sess = (session_id, hook_event_name, extra = {}) =>
+  hook({ hook_event_name, session_id, cwd: `C:\\p\\${session_id}`, ...extra });
+
+test("the oldest live session names the pill; a sibling does not take it over", () => {
+  sess("one", "SessionStart");
+  sess("two", "SessionStart");
+  sess("two", "PreToolUse", { tool_name: "Bash", tool_input: { command: "ls" } });
+  assert.equal(task().name, "one");
+  assert.equal(task().sessionId, "one");
+  assert.equal(task().sessionCwd, "C:\\p\\one");
+});
+
+test("a session stopping does not finish the pill while a sibling is mid-turn", () => {
+  sess("one", "UserPromptSubmit", { prompt: "a" });
+  sess("two", "UserPromptSubmit", { prompt: "b" });
+  sess("one", "Stop", { last_assistant_message: "one is done" });
+  assert.equal(task().state, "thinking");
+  assert.equal(task().steps.at(-1), "one is done");
+  seconds(6);
+  assert.equal(task().state, "thinking");
+  // The last one to stop finishes it.
+  sess("two", "Stop");
+  assert.equal(task().state, "finished");
+});
+
+test("only the last session to end takes the card and its steps down", () => {
+  sess("one", "SessionStart");
+  sess("two", "SessionStart");
+  sess("two", "PreToolUse", { tool_name: "Bash", tool_input: { command: "ls" } });
+  sess("one", "SessionEnd");
+  // The sibling's card stands, now under its own name.
+  assert.equal(task().state, "working");
+  assert.equal(task().name, "two");
+  assert.equal(task().steps.length, 1);
+  sess("two", "SessionEnd");
+  assert.equal(task().state, "idle");
+  assert.deepEqual(task().steps, []);
+});
+
+test("a sibling at work does not take the waiting card's state off the pill", () => {
+  sess("one", "PermissionRequest", { request_id: "r1", tool_name: "Bash" });
+  assert.equal(task().state, "approval");
+  sess("two", "PreToolUse", { tool_name: "Bash", tool_input: { command: "ls" } });
+  assert.equal(task().state, "approval");
+  assert.equal(State.pendingApproval.requestId, "r1");
 });
 
 test("the same request arriving twice is acknowledged again, not declined", () => {
@@ -689,9 +796,4 @@ test("a declined permission request leaves the stop timer running", () => {
     { coucou_agent: "gemini" },
   );
   assert.equal(task("agent_gemini"), undefined);
-  // So is a second request while a card is already up.
-  ask("r1");
-  afterStop(() => ask("r2"));
-  assert.deepEqual(sent("approval_decline"), [{ requestId: "r1" }, { requestId: "r2" }]);
-  assert.equal(task().state, "idle");
 });

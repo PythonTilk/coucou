@@ -15,22 +15,82 @@ import type { Island } from "./island";
 import { parseClaudePlan, restorePlanUsage } from "../core/plan";
 import { setClaudePlanUsage, storedClaudePlanUsage } from "../views/usage";
 import { N_, t } from "../i18n/i18n";
+import { Sessions } from "./sessions";
 
 const CLAUDE_ID = "integration_claude";
 const CURSOR_ID = "agent_cursor";
 
-/** Clears the approval card if no decision was made before the hook gave up. */
-let pendingTimeout: number | null = null;
+/**
+ * How many requests may wait behind the card that is up. Past that the newest
+ * goes back to its terminal (five in all, as on the Mac).
+ */
+export const MAX_WAITING = 4;
 
-/** Takes the approval or question card down and gives the island back. */
+/**
+ * Each request's own 110 s: Coucou answers within 108 s or not at all, after
+ * which the terminal has taken over and a card for it would be lying.
+ */
+const requestTimers = new Map<string, number>();
+
+function disarm(requestId: string) {
+  const timer = requestTimers.get(requestId);
+  if (timer == null) return;
+  window.clearTimeout(timer);
+  requestTimers.delete(requestId);
+}
+
+/**
+ * The next request in line takes the card. False when nobody is waiting. Called
+ * wherever a card has just gone: answered, withdrawn, or timed out.
+ */
+export function promoteNextApproval(island: Island): boolean {
+  if (State.pendingApproval) return true;
+  const next = State.approvalQueue.shift();
+  if (!next) return false;
+  const view = next.questions ? "question" : "approval";
+  State.beginApproval(next);
+  State.updateTask(next.pillId, view);
+  Sound.play(view);
+  island.alert(view);
+  State.notify();
+  return true;
+}
+
+/** Takes the approval or question card down and gives the island back, or to the next request. */
 export function dropPendingCard(island: Island): void {
-  if (!State.pendingApproval) return;
+  const pending = State.pendingApproval;
+  if (!pending) return;
+  disarm(pending.requestId);
   State.endApproval();
+  if (promoteNextApproval(island)) return;
   island.dropPin();
   if (State.view === "approval" || State.view === "question") {
     island.setView(State.defaultView());
   }
   State.notify();
+}
+
+/** A request is moot: its card goes, or it leaves the line. The relay is told when `decline`. */
+function withdraw(island: Island, requestId: string, decline: boolean) {
+  disarm(requestId);
+  if (State.pendingApproval?.requestId === requestId) {
+    if (decline && requestId) void Bridge.approvalDecline(requestId);
+    dropPendingCard(island);
+    return;
+  }
+  const at = State.approvalQueue.findIndex((r) => r.requestId === requestId);
+  if (at < 0) return;
+  State.approvalQueue.splice(at, 1);
+  if (decline && requestId) void Bridge.approvalDecline(requestId);
+  State.notify();
+}
+
+/** Forgets the sessions and the waiting requests (tests). */
+export function resetHookState() {
+  for (const timer of requestTimers.values()) window.clearTimeout(timer);
+  requestTimers.clear();
+  State.approvalQueue = [];
+  Sessions.clear();
 }
 
 /** The return to idle that Stop arms, per pill, so the next turn can cancel it. */
@@ -46,6 +106,12 @@ function cancelStopTimer(id: string): boolean {
 
 /** Events after which a pending permission request of the same session is moot. */
 const TURN_OVER = new Set(["Stop", "StopFailure", "UserPromptSubmit", "SessionEnd", "Interrupt"]);
+
+/** Events only a running session sends: these may add it to its pill's sessions. */
+const SESSION_OPENS = new Set(["SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest"]);
+/** A turn is under way after these, and over after those. */
+const TURN_STARTS = new Set(["UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest"]);
+const TURN_ENDS = new Set(["Stop", "StopFailure", "Interrupt"]);
 
 interface HookPayload {
   hook_event_name?: string;
@@ -261,6 +327,26 @@ function handleHook(island: Island, payload: HookPayload) {
   const isExternalAgent = validAgent !== null;
   const sessionId = payload.session_id ?? "";
 
+  // Who is alive behind this pill (sessions.ts). Only the events a running
+  // session sends may add one; the rest refresh it.
+  const now = Date.now();
+  if (name !== "SessionEnd") {
+    Sessions.seen(agentId, sessionId, now, { projectName, cwd }, SESSION_OPENS.has(name));
+    if (TURN_STARTS.has(name)) Sessions.turn(agentId, sessionId, true);
+    else if (TURN_ENDS.has(name)) Sessions.turn(agentId, sessionId, false);
+  }
+  /** A sibling session of the same pill is still in the middle of its turn. */
+  const siblingBusy = () => Sessions.siblingMidTurn(agentId, sessionId, now);
+  /**
+   * The pill's state, unless a card of another session is waiting on it: a
+   * sibling at work must not take "needs permission" off the pill.
+   */
+  const setState = (state: Parameters<typeof State.updateTask>[1]) => {
+    const card = State.pendingApproval;
+    if (card && card.pillId === agentId && card.sessionId !== sessionId) return;
+    State.updateTask(agentId, state);
+  };
+
   /** Alerts force the island open; work events only reveal the compact island. */
   const surface = (view: Parameters<Island["alert"]>[0], isAlert: boolean) => {
     if (State.mode === "expanded") {
@@ -274,13 +360,17 @@ function handleHook(island: Island, payload: HookPayload) {
 
   /** Ensure the agent pill exists (no-op for Claude Code). */
   const ensurePill = () => {
+    // The oldest live session owns what the card says: its project, its folder
+    // and its terminal. They pass to the next one when it ends.
+    const owner = Sessions.owner(agentId, now);
+    const own = owner ?? { projectName, cwd, id: sessionId };
     if (isExternalAgent) {
       State.upsertExternalAgent(agentId, agentName(validAgent!), agentColor(validAgent!));
       const t = State.tasks.find((x) => x.id === agentId);
-      if (t && cwd) t.sessionCwd = cwd;
-      if (t && sessionId) t.sessionId = sessionId;
+      if (t && own.cwd) t.sessionCwd = own.cwd;
+      if (t && own.id) t.sessionId = own.id;
     } else {
-      upsert(agentId, projectName, cwd, sessionId);
+      upsert(agentId, own.projectName, own.cwd, own.id);
     }
   };
 
@@ -296,17 +386,12 @@ function handleHook(island: Island, payload: HookPayload) {
   // The turn that asked for a permission is over — answered in the terminal,
   // interrupted, or a new prompt — so the card would be lying. It goes, and the
   // relay is released without a decision. Same rule as the Mac.
-  const pending = State.pendingApproval;
-  if (
-    pending &&
-    TURN_OVER.has(name) &&
-    pending.pillId === agentId &&
-    pending.sessionId === (payload.session_id ?? "")
-  ) {
-    if (pendingTimeout != null) window.clearTimeout(pendingTimeout);
-    pendingTimeout = null;
-    if (pending.requestId) void Bridge.approvalDecline(pending.requestId);
-    dropPendingCard(island);
+  if (TURN_OVER.has(name)) {
+    const moot = [State.pendingApproval, ...State.approvalQueue].filter(
+      (r): r is NonNullable<typeof r> => !!r && r.pillId === agentId && r.sessionId === sessionId,
+    );
+    // Those in line first, so the card that goes is not replaced by one of them.
+    for (const r of moot.reverse()) withdraw(island, r.requestId, true);
   }
 
   // Read after the card above is dropped: its pill may have handed the front
@@ -329,7 +414,7 @@ function handleHook(island: Island, payload: HookPayload) {
       ensurePill();
       supersedeStop();
       clearFinalLine(agentId);
-      State.updateTask(agentId, "thinking");
+      setState("thinking");
       // The field is `prompt`; reading `message` meant this step was always blank.
       const asked = payload.prompt ?? payload.message;
       if (asked) State.appendStep(agentId, asked.slice(0, 60));
@@ -341,7 +426,7 @@ function handleHook(island: Island, payload: HookPayload) {
       ensurePill();
       supersedeStop();
       clearFinalLine(agentId);
-      State.updateTask(agentId, "working");
+      setState("working");
       const tool = payload.tool_name ?? "Tool";
       State.appendStep(agentId, stepLabel(tool, payload.tool_input ?? {}));
       surface("overview", false);
@@ -356,17 +441,15 @@ function handleHook(island: Island, payload: HookPayload) {
         State.pendingApproval?.questions &&
         State.pendingApproval.sessionId === (payload.session_id ?? "")
       ) {
-        if (pendingTimeout != null) window.clearTimeout(pendingTimeout);
-        pendingTimeout = null;
         dropPendingCard(island);
       }
-      State.updateTask(agentId, "working");
+      setState("working");
       recordDiff(agentId, payload);
       break;
 
     case "PostToolUseFailure":
       supersedeStop();
-      State.updateTask(agentId, "working");
+      setState("working");
       State.appendStep(agentId, t("⚠ failed"));
       break;
 
@@ -375,17 +458,24 @@ function handleHook(island: Island, payload: HookPayload) {
       const lower = message.toLowerCase();
       if (lower.includes("rate limit") || lower.includes("limite d")) {
         supersedeStop();
-        State.updateTask(agentId, "ratelimit");
+        setState("ratelimit");
         Sound.play("rate");
       } else if (message.endsWith("?")) {
         supersedeStop();
-        State.updateTask(agentId, "question");
+        setState("question");
         State.appendStep(agentId, message);
       }
       break;
     }
 
     case "Stop": {
+      // A sibling still at work keeps the pill: this turn's last words go in the
+      // ticker, and the pill finishes when the last of them does.
+      if (siblingBusy()) {
+        const said = toOneLine(payload.last_assistant_message ?? payload.message ?? "");
+        if (said) State.appendStep(agentId, said);
+        break;
+      }
       State.updateTask(agentId, "finished");
       // Claude Code puts the turn's answer in the Stop payload itself, so there is
       // no transcript to read (the relay does not even forward its path). Other
@@ -418,6 +508,7 @@ function handleHook(island: Island, payload: HookPayload) {
     }
 
     case "Interrupt":
+      if (siblingBusy()) break;
       // Codex: the user stopped the turn. Back to idle, nothing to celebrate.
       supersedeStop();
       State.updateTask(agentId, "idle");
@@ -425,6 +516,10 @@ function handleHook(island: Island, payload: HookPayload) {
       break;
 
     case "StopFailure":
+      if (siblingBusy()) {
+        State.appendStep(agentId, t("⚠ failed"));
+        break;
+      }
       supersedeStop();
       State.updateTask(agentId, "error");
       Sound.play("error");
@@ -433,6 +528,15 @@ function handleHook(island: Island, payload: HookPayload) {
       break;
 
     case "SessionEnd":
+      // An end that does not say whose it is ends them all, as it always did.
+      if (sessionId) Sessions.end(agentId, sessionId);
+      else Sessions.endAll(agentId);
+      // Only the last live session takes the card and its diffs down. The name,
+      // folder and terminal pass to the oldest one left.
+      if (Sessions.live(agentId, now).length > 0) {
+        ensurePill();
+        break;
+      }
       // Nothing left for the timer to do, and it must not outlive the session: a
       // pill recreated within 5.2 s would be removed by it.
       cancelStopTimer(agentId);
@@ -463,16 +567,17 @@ function handleHook(island: Island, payload: HookPayload) {
       }
 
       const requestId = payload.request_id ?? "";
-      // One card, one request. A second one must never quietly replace the first
-      // — that would leave a human staring at request B while request A waits for
-      // a decision nobody can give. Hand it straight back to the terminal.
-      if (State.pendingApproval && State.pendingApproval.requestId !== requestId) {
+      const waiting = State.pendingApproval != null && State.pendingApproval.requestId !== requestId;
+      // One card, one request: a second one never replaces the first. It waits
+      // in line behind it — unless the line is full, or it has no id to be told
+      // apart by, in which case it goes straight back to its terminal.
+      if (waiting && (!requestId || State.approvalQueue.length >= MAX_WAITING)) {
         if (requestId) void Bridge.approvalDecline(requestId);
         break;
       }
       ensurePill();
       supersedeStop();
-      if (pendingTimeout != null) window.clearTimeout(pendingTimeout);
+      disarm(requestId);
       const tool = payload.tool_name ?? "Tool";
       const input = payload.tool_input ?? {};
       // Claude Code asking a question is not a permission to grant: the island
@@ -480,17 +585,36 @@ function handleHook(island: Island, payload: HookPayload) {
       // Code asks questions this way.
       const questions = isExternalAgent ? null : askedQuestions(tool, input);
       const view = questions ? "question" : "approval";
-      // The card always comes up, even over another pill or an island that is
-      // already open: its pill comes to the front, and the one you were on
-      // comes back once you answer (Mac #117, #120).
-      State.beginApproval({
+      const request = {
         requestId,
         sessionId,
         pillId: agentId,
         tool,
         command: approvalTarget(tool, input),
         ...(questions ? { questions } : {}),
-      });
+        // Named only when a pill is shared: its card says the owner's project.
+        ...(cwd && Sessions.live(agentId, now).length > 1 ? { projectName } : {}),
+      };
+      // Each request gets its own 110 s, on the card or in the line.
+      const arm = () =>
+        requestTimers.set(
+          requestId,
+          window.setTimeout(() => {
+            requestTimers.delete(requestId);
+            withdraw(island, requestId, false);
+          }, 110_000),
+        );
+      if (waiting) {
+        if (!State.approvalQueue.some((r) => r.requestId === requestId)) State.approvalQueue.push(request);
+        // The relay is told it has been taken, or it gives up after 800 ms.
+        void Bridge.approvalAck(requestId);
+        arm();
+        break;
+      }
+      // The card always comes up, even over another pill or an island that is
+      // already open: its pill comes to the front, and the one you were on
+      // comes back once you answer (Mac #117, #120).
+      State.beginApproval(request);
       // The relay's short ack window closes in 800 ms; everything below this
       // line is synchronous, so the card really is up by the time it lands.
       if (requestId) void Bridge.approvalAck(requestId);
@@ -499,12 +623,7 @@ function handleHook(island: Island, payload: HookPayload) {
       // Any agent's card (Claude Code, Codex, Copilot CLI, Muse Code) comes up
       // the same way: beginApproval brought its pill to the front.
       island.alert(view);
-      // Coucou answers within 108 s or not at all; after that the terminal has
-      // taken over and the card would be lying.
-      pendingTimeout = window.setTimeout(() => {
-        pendingTimeout = null;
-        dropPendingCard(island);
-      }, 110_000);
+      arm();
       break;
     }
 

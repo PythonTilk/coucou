@@ -14,6 +14,7 @@ import {
   type BotEmoteName, type IslandMode, type IslandViewName,
 } from "../core/layout";
 import { Sound } from "../core/sound";
+import { promoteNextApproval } from "./hooks";
 import { State, type DropTarget } from "../core/state";
 import { SPOTIFY_ID, islandDances } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
@@ -152,6 +153,8 @@ export class Island {
   /** The request has its answer: the card goes and the session carries on. */
   private closeApproval() {
     State.endApproval();
+    // Another request was waiting behind this one: its card comes up now.
+    if (promoteNextApproval(this)) return;
     this.fsm.pinned = false;
     this.setView(State.defaultView());
   }

@@ -106,6 +106,19 @@ function agentWho(task: AgentTask | null, label: string): HTMLElement {
   return row;
 }
 
+/** The pill of the card that is up, under the project of the session that asks. */
+function askingTask(): AgentTask | null {
+  const task = State.focusTask;
+  const project = State.pendingApproval?.projectName;
+  return task && project ? { ...task, name: project } : task;
+}
+
+/** " · 1/3" while other requests wait behind the card, nothing otherwise. */
+function waitingCount(): string {
+  const waiting = State.approvalQueue.length;
+  return waiting > 0 ? ` · 1/${waiting + 1}` : "";
+}
+
 function stack(padLeft: number, padRight: number, ...children: Node[]): HTMLElement {
   const el = h("div", { class: "stack" }, ...children);
   el.style.padding = `4px ${padRight}px 4px ${padLeft}px`;
@@ -540,7 +553,7 @@ function buildApproval(actions: ViewActions): ViewHost {
         shownAt = performance.now();
       }
       clear(who);
-      who.append(agentWho(State.focusTask, t("needs permission")));
+      who.append(agentWho(askingTask(), `${t("needs permission")}${waitingCount()}`));
       // The whole point of approving here rather than in the terminal: this line
       // is the command, the file path or the URL being authorised, not just the
       // name of the tool asking.

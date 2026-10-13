@@ -64,6 +64,8 @@ export interface ApprovalInfo {
   command: string;
   /** Set when Claude Code is asking a question rather than for a permission. */
   questions?: AskedQuestion[];
+  /** The project of the session that asks: a pill shared by two sessions shows only one name. */
+  projectName?: string;
 }
 
 /** One question of an AskUserQuestion call. */
@@ -275,6 +277,11 @@ class AppState {
   /** The half of the drop menu a carried file is over, if any. */
   dropTarget: DropTarget | null = null;
   pendingApproval: ApprovalInfo | null = null;
+  /**
+   * Requests that arrived while a card was up, oldest first (ApprovalQueue.swift,
+   * Mac #563). They wait their turn instead of being sent back to the terminal.
+   */
+  approvalQueue: ApprovalInfo[] = [];
   /** The pill that was in front when the card came up; it comes back after. */
   focusBeforeApproval: string | null = null;
 

@@ -158,6 +158,11 @@ whatever the interface language:
   provider chips and that provider's models in a full-width list. The model
   name above the chat box only switches between the picked provider's models,
   in a list that takes the island's full height while it is open.
+- **Several sessions on one pill** — two Claude Code sessions under the same
+  app no longer overwrite each other: the pill finishes when the last one does,
+  only the last to end takes the card down, and the oldest names it. Permission
+  requests wait in line (up to five) and the card says "1/3" while others wait.
+  Ported from the Mac (#562, #563).
 - **Updates itself** — the fork's own workflow (`.github/workflows/fork-release.yml`)
   builds and publishes each change as a signed release; **Settings… → Updates**
   and the tray say when a newer build is there, and install it on a click.
