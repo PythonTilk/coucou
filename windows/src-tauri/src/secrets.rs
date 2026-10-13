@@ -21,6 +21,8 @@ pub const KNOWN_KEYS: &[&str] = &[
     "notion-api-key",
     "calcom-api-key",
     "calendar-ics-url",
+    // Read-only access to the private repository this build updates from (updates.rs).
+    "updates-token",
 ];
 
 fn entry(key: &str) -> Option<Entry> {

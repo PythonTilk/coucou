@@ -7,6 +7,7 @@
 import { h, clear } from "../views/dom";
 import { Bridge, onEvent, type UpdateStatus } from "../core/bridge";
 import type { Settings } from "../core/state";
+import { t } from "../i18n/i18n";
 
 /** "just now", "12 min ago", "3 h ago", or the day. */
 export function checkedLabel(checkedAt: number, now = Date.now()): string {
@@ -26,6 +27,68 @@ export function statusLine(status: UpdateStatus | null, now = Date.now()): strin
   if (status.error) return `Could not check: ${status.error}`;
   if (!status.checkedAt) return "Not checked yet.";
   return `This is the newest build. ${checkedLabel(status.checkedAt, now)}.`;
+}
+
+/** The keystore entry of the token that reads the private builds (updates.rs). */
+const TOKEN_KEY = "updates-token";
+
+/**
+ * The read-only token for the private builds: saved to the OS keystore, never
+ * shown again. `onSaved` looks for an update straight away.
+ */
+function tokenRow(onSaved: () => void): HTMLElement {
+  const input = h("input", {
+    type: "password", autocomplete: "off", spellcheck: "false", style: "flex:1 1 auto;min-width:0",
+  }) as HTMLInputElement;
+  const dot = h("i", { class: "dot" });
+  const save = h("button", { text: t("Save") });
+  const remove = h("button", { class: "danger", text: t("Remove") });
+  const said = h("div", { class: "hint" });
+  let present = false;
+  const draw = () => {
+    dot.style.background = present ? "#22c55e" : "#f4505e";
+    input.placeholder = present ? "••••••••••••  (stored)" : "github_pat_…";
+    remove.style.display = present ? "" : "none";
+  };
+  void Bridge.secretPresent(TOKEN_KEY).then((p) => {
+    present = p ?? false;
+    draw();
+  });
+  save.addEventListener("click", async () => {
+    const value = input.value.trim();
+    if (!value) return;
+    try {
+      await Bridge.secretSet(TOKEN_KEY, value);
+      input.value = "";
+      present = true;
+      said.textContent = "Saved in the system's credential store.";
+      draw();
+      onSaved();
+    } catch (err) {
+      said.textContent = `Could not save: ${String(err)}`;
+    }
+  });
+  remove.addEventListener("click", async () => {
+    try {
+      await Bridge.secretClear(TOKEN_KEY);
+      present = false;
+      said.textContent = "Removed.";
+      draw();
+    } catch (err) {
+      said.textContent = `Could not remove: ${String(err)}`;
+    }
+  });
+  draw();
+  return h(
+    "div",
+    { style: "display:flex;flex-direction:column;gap:6px" },
+    h("div", { class: "row" }, h("label", { text: "Access token" }), dot, input, save, remove),
+    h("div", {
+      class: "hint",
+      text: "A fine-grained GitHub token that can only read the contents of your builds repository. It is sent to GitHub and nowhere else.",
+    }),
+    said,
+  );
 }
 
 export function updatesSection(
@@ -99,11 +162,12 @@ export function updatesSection(
     h("h2", {}, dot, h("span", { text: "Updates" })),
     h("div", {
       class: "hint",
-      text: "This build comes from your own fork, which publishes a new version each time it changes. Coucou asks GitHub for the newest one and installs it when you say so. Windows asks for administrator rights at each install.",
+      text: "This build comes from your own fork. Its builds are kept in a private repository of yours; Coucou asks it for the newest one and installs it when you say so. Windows asks for administrator rights at each install.",
     }),
     buttons,
     line,
     notes,
+    tokenRow(() => void look()),
     h("div", { class: "row" },
       h("label", { text: "Check automatically" }),
       toggle(settings.checkForUpdates, (v) => {

@@ -163,9 +163,11 @@ whatever the interface language:
   only the last to end takes the card down, and the oldest names it. Permission
   requests wait in line (up to five) and the card says "1/3" while others wait.
   Ported from the Mac (#562, #563).
-- **Updates itself** — the fork's own workflow (`.github/workflows/fork-release.yml`)
-  builds and publishes each change as a signed release; **Settings… → Updates**
-  and the tray say when a newer build is there, and install it on a click.
+- **Updates itself** — a private repository builds each change and keeps the
+  signed installer (a fork may not publish builds under the Coucou name, see
+  `LICENSE-ASSETS.md`); **Settings… → Updates** and the tray say when a newer
+  build is there, and install it on a click. It reads the builds with a
+  read-only token kept in the system's credential store.
   Versions are upstream's with the build number on top (0.4.0 built for the
   7th time is 0.4.7). Nothing is installed on its own.
 - **Settings that fold** — the sections sit under four headings (Island,
