@@ -158,6 +158,10 @@ whatever the interface language:
   provider chips and that provider's models in a full-width list. The model
   name above the chat box only switches between the picked provider's models,
   in a list that takes the island's full height while it is open.
+- **Voice** — press **Ctrl+Alt+V**, ask something, and Mochi answers on the
+  island and out loud. Windows' own speech recognition hears the question
+  (its "Online speech recognition" switch must be on); Claude answers with your
+  API key, knowing what the island shows. Press again to stop him talking.
 - **Mail pill** — the newest messages of an inbox, read over IMAP: sender,
   subject and age, unread ones marked, a click opens the conversation in Gmail.
   Read-only by construction (EXAMINE and PEEK: nothing is marked as read) and

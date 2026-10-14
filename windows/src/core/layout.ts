@@ -25,6 +25,7 @@ export type IslandViewName =
   | "recap"
   | "wardrobe"
   | "focus"
+  | "voice"
   | "shelf"
   | "drop";
 
@@ -97,6 +98,7 @@ export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
   recap: { height: 184, botX: 62, botY: null, botDiameter: 58, agentMode: "column" },
   wardrobe: { height: 160, botX: 68, botY: null, botDiameter: 58, agentMode: "none" },
   focus: { height: 160, botX: 62, botY: null, botDiameter: 56, agentMode: "column" },
+  voice: { height: 160, botX: 62, botY: null, botDiameter: 56, agentMode: "none" },
   shelf: { height: 176, botX: 52, botY: null, botDiameter: 44, agentMode: "column" },
   // Mochi stands in the gap between the two halves of the drop menu.
   drop: { height: 176, botX: 320, botY: 104, botDiameter: 40, agentMode: "none" },

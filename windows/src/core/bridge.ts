@@ -369,6 +369,9 @@ export const Bridge = {
   secretPresent: (key: string) => call<boolean>("secret_present", { key }),
   /** The server the Mail pill logs in to, as stored with its password. */
   mailServer: () => call<string | null>("mail_server"),
+  // Voice (voice.rs): a phrase heard, then Claude's answer to it.
+  voiceListen: () => callOrThrow<string>("voice_listen"),
+  voiceAnswer: (heard: string, context: string) => callOrThrow<string>("voice_answer", { heard, context }),
   secretSet: (key: string, value: string) => callOrThrow<void>("secret_set", { key, value }),
   secretClear: (key: string) => callOrThrow<void>("secret_clear", { key }),
 

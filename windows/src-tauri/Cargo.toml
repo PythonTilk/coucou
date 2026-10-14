@@ -61,6 +61,8 @@ windows = { version = "0.61", features = [
   "Foundation",
   "Foundation_Collections",
   "Media_Control",
+  # Voice (voice.rs): Windows' own dictation.
+  "Media_SpeechRecognition",
   "Storage_Streams",
   "Win32_Media_Audio",
   "Win32_Media_Audio_Endpoints",

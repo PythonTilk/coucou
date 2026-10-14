@@ -272,6 +272,8 @@ class AppState {
   pendingPrompt: PresetPrompt | null = null;
   /** What is on the shelf, as last read from disk. */
   shelf: ShelfItem[] = [];
+  /** The spoken turn on the voice card (island/voice.ts), local to this build. */
+  voice: import("../island/voice").VoiceTurn | null = null;
   /** True while one of our own files is being dragged out of the island. */
   shelfDragging = false;
   /** The half of the drop menu a carried file is over, if any. */
