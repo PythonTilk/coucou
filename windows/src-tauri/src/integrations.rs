@@ -797,11 +797,19 @@ fn parse_notion_page(obj: &Value) -> Option<Value> {
 /// A new message at the top is said once, by its sender: the subject stays on
 /// the card.
 async fn poll_mail(app: AppHandle) {
-    let (Some(address), Some(password)) = (secrets::get("mail-address"), secrets::get("mail-password")) else {
+    // Checked here too, not only by the timer: the card's Refresh button comes
+    // straight to this function, and a pill that is off, or a paused app, must
+    // not log in anywhere.
+    if PAUSED.load(Ordering::Relaxed) || !enabled(&app, "integration_mail") {
+        return;
+    }
+    let (Some(address), Some(password)) =
+        (secrets::get(crate::mail::ADDRESS_KEY), secrets::get(crate::mail::PASSWORD_KEY))
+    else {
         return;
     };
-    let host = secrets::get("mail-host").unwrap_or_else(|| crate::mail::DEFAULT_HOST.to_string());
-    match crate::mail::fetch(host.trim(), address.trim(), &password).await {
+    let host = crate::mail::host_of(secrets::get(crate::mail::HOST_KEY).as_deref());
+    match crate::mail::fetch(&host, address.trim(), &password).await {
         Ok(inbox) => {
             let newest = inbox.messages.first();
             let key = newest.map(|m| format!("{}|{}|{}", m.date_ms, m.from, m.subject)).unwrap_or_default();
@@ -814,7 +822,7 @@ async fn poll_mail(app: AppHandle) {
             }
             emit(&app, IntegrationUpdate {
                 id: "integration_mail",
-                data: json!({ "unread": inbox.unread, "messages": inbox.messages, "gmail": host.trim() == crate::mail::DEFAULT_HOST }),
+                data: json!({ "unread": inbox.unread, "messages": inbox.messages, "gmail": host == crate::mail::DEFAULT_HOST }),
                 error: None,
                 event,
             });
@@ -833,6 +841,10 @@ async fn poll_mail(app: AppHandle) {
 /// The links live in one credential-store entry, separated by spaces or
 /// commas: a timetable link usually carries a private token.
 async fn poll_calendar(app: AppHandle) {
+    // The Refresh button comes here directly: off or paused means no request.
+    if PAUSED.load(Ordering::Relaxed) || !enabled(&app, "integration_calendar") {
+        return;
+    }
     let Some(links) = secrets::get("calendar-ics-url") else { return };
     let mut feeds = Vec::new();
     let mut failure = None;

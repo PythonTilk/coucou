@@ -573,6 +573,13 @@ fn secret_set(app: AppHandle, key: String, value: String) -> Result<(), String> 
     if key == local_chat::CUSTOM_KEY {
         return Err("use local_set_key".into());
     }
+    // The mail password belongs to the server it was entered for: a change of
+    // server forgets it, so it cannot be sent anywhere it was not meant for.
+    if key == mail::HOST_KEY
+        && mail::host_change_forgets_password(secrets::get(mail::HOST_KEY).as_deref(), Some(&value))
+    {
+        secrets::clear(mail::PASSWORD_KEY)?;
+    }
     let before = (key == "github-token").then(|| secrets::get(&key));
     secrets::set(&key, &value)?;
     if let Some(before) = before {
@@ -585,6 +592,9 @@ fn secret_set(app: AppHandle, key: String, value: String) -> Result<(), String> 
 
 #[tauri::command]
 fn secret_clear(app: AppHandle, key: String) -> Result<(), String> {
+    if key == mail::HOST_KEY && mail::host_change_forgets_password(secrets::get(mail::HOST_KEY).as_deref(), None) {
+        secrets::clear(mail::PASSWORD_KEY)?;
+    }
     let had = key == "github-token" && secrets::present(&key);
     secrets::clear(&key)?;
     if had {

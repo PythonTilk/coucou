@@ -24,6 +24,27 @@ use tokio_rustls::TlsConnector;
 
 /// Gmail's, when the user names no other server.
 pub const DEFAULT_HOST: &str = "imap.gmail.com";
+
+/// The keystore entries of the Mail pill.
+pub const ADDRESS_KEY: &str = "mail-address";
+pub const PASSWORD_KEY: &str = "mail-password";
+pub const HOST_KEY: &str = "mail-host";
+
+/// The server the stored host names: Gmail's when there is none.
+pub fn host_of(stored: Option<&str>) -> String {
+    match stored.map(str::trim).filter(|h| !h.is_empty()) {
+        Some(host) => host.to_ascii_lowercase(),
+        None => DEFAULT_HOST.to_string(),
+    }
+}
+
+/// True when storing `new_host` would send the password somewhere other than
+/// where it goes today. A password belongs to the server it was entered for:
+/// when the server changes, the password is forgotten and asked for again, so
+/// nothing that can change the server can redirect a password already stored.
+pub fn host_change_forgets_password(old_host: Option<&str>, new_host: Option<&str>) -> bool {
+    host_of(old_host) != host_of(new_host)
+}
 const PORT: u16 = 993;
 /// How many of the newest messages are read.
 const NEWEST: u32 = 12;
@@ -510,6 +531,17 @@ mod tests {
         assert!(!valid_host("imap.gmail.com/x"));
         assert!(!valid_host("localhost"));
         assert!(!valid_host("a b.com"));
+    }
+
+    #[test]
+    fn a_password_does_not_follow_the_server_to_another_one() {
+        assert!(host_change_forgets_password(None, Some("imap.evil.example")));
+        assert!(host_change_forgets_password(Some("imap.fastmail.com"), None));
+        assert!(host_change_forgets_password(Some("imap.fastmail.com"), Some("imap.other.example")));
+        // The same server, said another way, is the same server.
+        assert!(!host_change_forgets_password(None, Some("imap.gmail.com")));
+        assert!(!host_change_forgets_password(None, Some("  ")));
+        assert!(!host_change_forgets_password(Some("IMAP.Fastmail.com"), Some("imap.fastmail.com ")));
     }
 
     #[test]
