@@ -24,6 +24,7 @@ import { h, clear } from "../views/dom";
 import { agentsSection } from "./agents";
 import { foldedGroups } from "./folding";
 import { updatesSection } from "./updates";
+import { alertsSection } from "./alerts";
 import { phoneSection } from "./phone";
 import { colorDot } from "./colors";
 import { renderDiff, statusDot } from "./parts";
@@ -1552,6 +1553,7 @@ async function render() {
         sections: [
           ["integrations", integrationsSection(present)],
           ["phone", phoneSection(settings.phoneLink ?? false, toggle, settings)],
+          ["alerts", alertsSection()],
         ],
       },
     ]),

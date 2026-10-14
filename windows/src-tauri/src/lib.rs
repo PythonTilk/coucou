@@ -2,6 +2,7 @@
 
 mod agent_hooks;
 mod agents;
+mod alerts;
 mod beat;
 mod calendar;
 mod chat;
@@ -728,6 +729,23 @@ pub fn show_settings_window(app: &AppHandle) {
     let _ = win.set_focus();
 }
 
+/// A phone alert through ntfy, when nobody is at the computer (alerts.rs).
+/// True when one was sent.
+#[tauri::command]
+async fn phone_alert(kind: String, agent: String) -> Result<bool, String> {
+    let Some(kind) = alerts::Kind::parse(&kind) else { return Ok(false) };
+    if integrations::PAUSED.load(std::sync::atomic::Ordering::Relaxed) {
+        return Ok(false);
+    }
+    alerts::send(kind, &agent, false).await
+}
+
+/// The Test button: one notice now, whoever is at the computer.
+#[tauri::command]
+async fn phone_alert_test() -> Result<bool, String> {
+    alerts::send(alerts::Kind::Finished, "Coucou test", true).await
+}
+
 /// Voice: one spoken phrase as text ("" when nothing was said in time).
 #[tauri::command]
 async fn voice_listen() -> Result<String, String> {
@@ -847,6 +865,8 @@ pub fn run() {
             mail_server,
             update_status,
             voice_listen,
+            phone_alert,
+            phone_alert_test,
             voice_answer,
             update_check,
             update_install,

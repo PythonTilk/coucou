@@ -25,6 +25,8 @@ pub const KNOWN_KEYS: &[&str] = &[
     "mail-address",
     "mail-password",
     "mail-host",
+    // Phone alerts (alerts.rs): the ntfy topic's address; whoever knows it can read it.
+    "ntfy-topic-url",
     // Read-only access to the private repository this build updates from (updates.rs).
     "updates-token",
 ];

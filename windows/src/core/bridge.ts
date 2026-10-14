@@ -369,6 +369,10 @@ export const Bridge = {
   secretPresent: (key: string) => call<boolean>("secret_present", { key }),
   /** The server the Mail pill logs in to, as stored with its password. */
   mailServer: () => call<string | null>("mail_server"),
+  // Phone alerts through ntfy (alerts.rs): sent only when nobody is at the computer.
+  phoneAlert: (kind: "approval" | "question" | "finished" | "error", agent: string) =>
+    call<boolean>("phone_alert", { kind, agent }),
+  phoneAlertTest: () => callOrThrow<boolean>("phone_alert_test"),
   // Voice (voice.rs): a phrase heard, then Claude's answer to it.
   voiceListen: () => callOrThrow<string>("voice_listen"),
   voiceAnswer: (heard: string, context: string) => callOrThrow<string>("voice_answer", { heard, context }),

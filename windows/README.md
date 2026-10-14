@@ -158,6 +158,11 @@ whatever the interface language:
   provider chips and that provider's models in a full-width list. The model
   name above the chat box only switches between the picked provider's models,
   in a list that takes the island's full height while it is open.
+- **Phone alerts through ntfy** — while nobody is at the computer (no input
+  for a minute), a permission request, a question, a finished turn or an error
+  posts a short notice to your own ntfy topic: who and what kind of thing,
+  never the command or the question. Tapping it opens Islet on the iPhone.
+  **Settings… → Integrations → Phone alerts**.
 - **Voice** — press **Ctrl+Alt+V**, ask something, and Mochi answers on the
   island and out loud. Windows' own speech recognition hears the question
   (its "Online speech recognition" switch must be on); Claude answers with your

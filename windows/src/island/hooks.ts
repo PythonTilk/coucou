@@ -85,6 +85,16 @@ function withdraw(island: Island, requestId: string, decline: boolean) {
   State.notify();
 }
 
+/**
+ * A notice to the phone through ntfy (alerts.rs, local to this build): who,
+ * and what kind of thing, never the command or the question. Rust sends it
+ * only when nobody is at the computer and alerts are set up.
+ */
+function alertPhone(kind: "approval" | "question" | "finished" | "error", pillId: string) {
+  const name = State.tasks.find((t) => t.id === pillId)?.name ?? "";
+  void Bridge.phoneAlert(kind, name);
+}
+
 /** Forgets the sessions and the waiting requests (tests). */
 export function resetHookState() {
   for (const timer of requestTimers.values()) window.clearTimeout(timer);
@@ -477,6 +487,7 @@ function handleHook(island: Island, payload: HookPayload) {
         break;
       }
       State.updateTask(agentId, "finished");
+      alertPhone("finished", agentId);
       // Claude Code puts the turn's answer in the Stop payload itself, so there is
       // no transcript to read (the relay does not even forward its path). Other
       // agents report their last words the same way (Hermes, Codex) or as
@@ -522,6 +533,7 @@ function handleHook(island: Island, payload: HookPayload) {
       }
       supersedeStop();
       State.updateTask(agentId, "error");
+      alertPhone("error", agentId);
       Sound.play("error");
       if (focused && !State.pendingApproval) surface("error", true);
       else State.setPillBadge(agentId, "error");
@@ -611,6 +623,7 @@ function handleHook(island: Island, payload: HookPayload) {
         // The relay is told it has been taken, or it gives up after 800 ms.
         void Bridge.approvalAck(requestId);
         arm();
+        alertPhone(view, agentId);
         break;
       }
       // The card always comes up, even over another pill or an island that is
@@ -626,6 +639,7 @@ function handleHook(island: Island, payload: HookPayload) {
       // the same way: beginApproval brought its pill to the front.
       island.alert(view);
       arm();
+      alertPhone(view, agentId);
       break;
     }
 
