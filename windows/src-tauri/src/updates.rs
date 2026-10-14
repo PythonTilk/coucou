@@ -21,7 +21,14 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri::http::header::{HeaderValue, ACCEPT};
 use tauri_plugin_updater::{Updater, UpdaterExt};
+
+/// Asked of GitHub's API for the build list: the file itself, not a description
+/// of it. A fine-grained token is read by the API, not by the raw-file host.
+const ACCEPT_FILE: &str = "application/vnd.github.raw+json";
+/// Asked of the API for a release's file: its bytes.
+const ACCEPT_INSTALLER: &str = "application/octet-stream";
 
 /// The keystore entry of the token that reads the private builds.
 pub const TOKEN_KEY: &str = "updates-token";
@@ -41,6 +48,8 @@ fn updater(app: &AppHandle) -> Result<Updater, String> {
     app.updater_builder()
         .header("Authorization", format!("Bearer {token}"))
         .map_err(|_| "The access token has characters a token cannot have.".to_string())?
+        .header(ACCEPT, ACCEPT_FILE)
+        .map_err(brief)?
         .build()
         .map_err(brief)
 }
@@ -128,7 +137,11 @@ pub async fn check(app: &AppHandle) -> UpdateStatus {
                 Err("The build list points somewhere other than GitHub. Nothing was downloaded.".to_string())
             }
             Ok(found) => Ok(found),
-            Err(err) => Err(explain(brief(err))),
+            Err(err) => {
+                // What it really said, for the log: the sentence shown is a guess at why.
+                crate::log::line(format!("update: the check answered: {}", brief(&err)));
+                Err(explain(brief(err)))
+            }
         },
         Err(err) => Err(err),
     };
@@ -167,7 +180,7 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
     }
     publish(app);
     let result = async {
-        let update = updater(app)?
+        let mut update = updater(app)?
             .check()
             .await
             .map_err(|e| explain(brief(e)))?
@@ -175,6 +188,9 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
         if !download_allowed(&update.download_url) {
             return Err("The build list points somewhere other than GitHub. Nothing was downloaded.".to_string());
         }
+        // The same requests' headers go with the download: there it is the
+        // installer's bytes that are asked for, not a file of the repository.
+        update.headers.insert(ACCEPT, HeaderValue::from_static(ACCEPT_INSTALLER));
         crate::log::line(format!("update: installing {}", update.version));
         update.download_and_install(|_, _| {}, || {}).await.map_err(brief)
     }

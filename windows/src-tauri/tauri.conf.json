@@ -65,7 +65,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZCQ0NCNEJBMUQyNEE2MUMKUldRY3BpUWR1clRNYTRKaW5xeVdIdk9BcVN1R0VFbi9vYnozTXdyTUg0TzRGRWlEejNZdnUzWnoK",
       "endpoints": [
-        "https://raw.githubusercontent.com/PythonTilk/coucou-builds/main/latest.json"
+        "https://api.github.com/repos/PythonTilk/coucou-builds/contents/latest.json"
       ],
       "windows": {
         "installMode": "passive"
