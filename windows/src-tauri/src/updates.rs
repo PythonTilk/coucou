@@ -121,6 +121,22 @@ fn explain(err: String) -> String {
     }
 }
 
+/// An error and the errors behind it, on one line. Never the request's headers:
+/// only what each layer says went wrong.
+fn causes(err: &dyn std::error::Error) -> String {
+    let mut out = brief(err);
+    let mut source = err.source();
+    while let Some(inner) = source {
+        let text = brief(inner);
+        if !out.contains(&text) {
+            out.push_str(" <- ");
+            out.push_str(&text);
+        }
+        source = inner.source();
+    }
+    out.chars().take(400).collect()
+}
+
 /// Tells Settings and the tray what is known now.
 fn publish(app: &AppHandle) -> UpdateStatus {
     let status = app.state::<Updates>().status(app);
@@ -138,8 +154,10 @@ pub async fn check(app: &AppHandle) -> UpdateStatus {
             }
             Ok(found) => Ok(found),
             Err(err) => {
-                // What it really said, for the log: the sentence shown is a guess at why.
-                crate::log::line(format!("update: the check answered: {}", brief(&err)));
+                // What it really said, for the log, with what lies behind it (a
+                // name that did not resolve, a timeout): the sentence shown is a
+                // guess at why.
+                crate::log::line(format!("update: the check answered: {}", causes(&err)));
                 Err(explain(brief(err)))
             }
         },
@@ -230,7 +248,16 @@ pub fn spawn(app: AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{brief, download_allowed, explain};
+    use super::{brief, causes, download_allowed, explain};
+
+    #[test]
+    fn an_error_is_logged_with_what_lies_behind_it() {
+        let inner = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
+        let outer = std::io::Error::new(std::io::ErrorKind::Other, inner);
+        assert_eq!(causes(&outer), "timed out");
+        let plain = std::io::Error::new(std::io::ErrorKind::Other, "no route");
+        assert_eq!(causes(&plain), "no route");
+    }
 
     #[test]
     fn the_token_goes_to_githubs_api_and_nowhere_else() {
