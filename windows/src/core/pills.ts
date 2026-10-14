@@ -128,6 +128,9 @@ export const PILL_CATALOG: readonly PillDefinition[] = [
   // Local to this build: what is coming up, from iCal subscription links.
   { id: "integration_calendar", name: "Calendar", color: "#38BDF8", category: "service",
     subtitle: N_("Integration"), source: "n8n", support: "yes", connect: key("calendar-ics-url") },
+  // Local to this build: the inbox's newest messages, read over IMAP.
+  { id: "integration_mail", name: "Mail", color: "#EA4335", category: "service",
+    subtitle: N_("Integration"), source: "n8n", support: "yes", connect: key("mail-password") },
   { id: "integration_stripe", name: "Stripe", color: "#0570DE", category: "service",
     subtitle: N_("Integration"), source: "n8n", support: "yes", connect: key("stripe-api-key") },
   { id: "integration_music", name: "Apple Music", color: "#FA2D48", category: "service",

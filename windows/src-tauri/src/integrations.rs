@@ -72,6 +72,7 @@ pub fn start(app: AppHandle) {
     spawn_github_loops(app.clone());
     spawn(app.clone(), "integration_calcom", 8, 300, poll_calcom);
     spawn(app.clone(), "integration_calendar", 10, 900, poll_calendar);
+    spawn(app.clone(), "integration_mail", 11, 60, poll_mail);
     spawn(app, "integration_notion", 9, 300, poll_notion);
 }
 
@@ -122,6 +123,7 @@ pub async fn poll_once(app: AppHandle, id: &str) {
         "integration_notion" => poll_notion(app).await,
         "integration_calcom" => poll_calcom(app).await,
         "integration_calendar" => poll_calendar(app).await,
+        "integration_mail" => poll_mail(app).await,
         _ => {}
     }
 }
@@ -788,6 +790,43 @@ fn parse_notion_page(obj: &Value) -> Option<Value> {
 }
 
 // ── Cal.com ───────────────────────────────────────────────────────────────────
+
+// ── Mail (IMAP, read-only) ────────────────────────────────────────────────────
+
+/// The inbox's newest messages, once a minute while the pill is on (mail.rs).
+/// A new message at the top is said once, by its sender: the subject stays on
+/// the card.
+async fn poll_mail(app: AppHandle) {
+    let (Some(address), Some(password)) = (secrets::get("mail-address"), secrets::get("mail-password")) else {
+        return;
+    };
+    let host = secrets::get("mail-host").unwrap_or_else(|| crate::mail::DEFAULT_HOST.to_string());
+    match crate::mail::fetch(host.trim(), address.trim(), &password).await {
+        Ok(inbox) => {
+            let newest = inbox.messages.first();
+            let key = newest.map(|m| format!("{}|{}|{}", m.date_ms, m.from, m.subject)).unwrap_or_default();
+            let event = newest
+                .filter(|m| m.unread && is_new("integration_mail", &key))
+                .map(|m| IntegrationEvent { success: true, label: "New mail".to_string(), detail: Some(m.from.clone()) });
+            if newest.is_none() {
+                // Nothing to compare the next look with yet.
+                is_new("integration_mail", "");
+            }
+            emit(&app, IntegrationUpdate {
+                id: "integration_mail",
+                data: json!({ "unread": inbox.unread, "messages": inbox.messages, "gmail": host.trim() == crate::mail::DEFAULT_HOST }),
+                error: None,
+                event,
+            });
+        }
+        Err(error) => emit(&app, IntegrationUpdate {
+            id: "integration_mail",
+            data: json!({}),
+            error: Some(error),
+            event: None,
+        }),
+    }
+}
 
 // ── Calendar (iCal subscriptions) ─────────────────────────────────────────────
 

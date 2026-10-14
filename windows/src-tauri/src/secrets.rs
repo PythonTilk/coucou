@@ -21,6 +21,10 @@ pub const KNOWN_KEYS: &[&str] = &[
     "notion-api-key",
     "calcom-api-key",
     "calendar-ics-url",
+    // The Mail pill (mail.rs): the address, an app password, and the server when it is not Gmail's.
+    "mail-address",
+    "mail-password",
+    "mail-host",
     // Read-only access to the private repository this build updates from (updates.rs).
     "updates-token",
 ];

@@ -348,6 +348,56 @@ export function whenLabel(startMs: number, allDay: boolean, now = new Date()): s
   return `${day} ${when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
 }
 
+/** "now", "12 min", "3 h", "Tue", or the date. */
+export function mailAge(dateMs: number, now = Date.now()): string {
+  if (!dateMs) return "";
+  const minutes = Math.floor((now - dateMs) / 60_000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h`;
+  const when = new Date(dateMs);
+  if (minutes < 7 * 24 * 60) return when.toLocaleDateString(undefined, { weekday: "short" });
+  return when.toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" });
+}
+
+/** Where a click on a message goes: its conversation in Gmail, when it has one. */
+export function mailLink(thread: unknown, gmail: boolean): string | null {
+  if (!gmail) return null;
+  return typeof thread === "string" && /^[0-9a-f]{1,16}$/.test(thread)
+    ? `https://mail.google.com/mail/u/0/#inbox/${thread}`
+    : "https://mail.google.com/mail/u/0/#inbox";
+}
+
+/** The inbox's newest messages (mail.rs): sender, age, subject; unread ones stand out. */
+function mailCard(): HTMLElement {
+  const accent = "#EA4335";
+  const data = get("integration_mail");
+  const messages = arr("integration_mail", "messages");
+  const unread = Number(data.unread ?? 0);
+  const rows = h("div", { class: "int-rows tight" });
+  if (messages.length === 0) {
+    rows.append(h("div", { class: "int-empty", text: "The inbox is empty" }));
+  }
+  messages.slice(0, 3).forEach((m, i) => {
+    const isUnread = m.unread === true;
+    const from = h("span", { class: "int-time", text: String(m.from ?? "") });
+    from.style.color = isUnread ? accent : "";
+    from.style.fontWeight = isUnread ? "600" : "";
+    const subject = String(m.subject ?? "") || "(no subject)";
+    const name = h("span", { class: "int-name", text: `${subject} · ${mailAge(Number(m.dateMs ?? 0))}` });
+    name.title = subject;
+    const row = listRow(accent, i === 0, from, name);
+    const link = mailLink(m.thread, data.gmail === true);
+    if (link) {
+      row.style.cursor = "pointer";
+      row.addEventListener("click", () => void Bridge.openUrl(link));
+    }
+    rows.append(row);
+  });
+  const kind = unread === 0 ? "Inbox" : `${unread} unread`;
+  return h("div", { class: "int-card" }, header(accent, "Mail", kind), rows);
+}
+
 function calendarCard(): HTMLElement {
   const accent = "#38BDF8";
   const events = arr("integration_calendar", "events")
@@ -476,6 +526,7 @@ export function hasIntegrationData(id: string): boolean {
       return arr(id, "pages").length > 0;
     case "integration_calcom":
     case "integration_calendar":
+    case "integration_mail":
       return info.loaded;
     default:
       return false;
@@ -518,6 +569,8 @@ export function renderIntegrationCard(task: AgentTask, hooks: IntegrationCardHoo
       return calcomCard();
     case "integration_calendar":
       return calendarCard();
+    case "integration_mail":
+      return mailCard();
     default:
       return idleCard(task, hooks.openSettings);
   }

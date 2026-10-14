@@ -884,6 +884,12 @@ const INTEGRATIONS: IntegrationDef[] = [
     fields: [{ key: "notion-api-key", label: N_("Integration token"), placeholder: "ntn_…", secret: true }] },
   { id: "integration_calcom", name: "Cal.com", color: "#C9956A",
     fields: [{ key: "calcom-api-key", label: N_("API key"), placeholder: "cal_…", secret: true }] },
+  { id: "integration_mail", name: "Mail", color: "#EA4335",
+    fields: [
+      { key: "mail-address", label: "Address", placeholder: "you@gmail.com", secret: false },
+      { key: "mail-password", label: "App password", placeholder: "16 letters from your Google account", secret: true },
+      { key: "mail-host", label: "Server", placeholder: "imap.gmail.com (leave empty for Gmail)", secret: false },
+    ] },
   { id: "integration_calendar", name: "Calendar", color: "#38BDF8",
     fields: [{
       key: "calendar-ics-url", label: "iCal subscription",

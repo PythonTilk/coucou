@@ -158,6 +158,11 @@ whatever the interface language:
   provider chips and that provider's models in a full-width list. The model
   name above the chat box only switches between the picked provider's models,
   in a list that takes the island's full height while it is open.
+- **Mail pill** — the newest messages of an inbox, read over IMAP: sender,
+  subject and age, unread ones marked, a click opens the conversation in Gmail.
+  Read-only by construction (EXAMINE and PEEK: nothing is marked as read) and
+  headers only, never a body. Gmail needs an app password; the address and the
+  password are kept in the system's credential store.
 - **Several sessions on one pill** — two Claude Code sessions under the same
   app no longer overwrite each other: the pill finishes when the last one does,
   only the last to end takes the card down, and the oldest names it. Permission
