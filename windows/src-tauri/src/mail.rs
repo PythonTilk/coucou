@@ -38,6 +38,27 @@ pub fn host_of(stored: Option<&str>) -> String {
     }
 }
 
+/// The password entry as it is stored: the server it was entered for, a line
+/// break, then the password. Kept together so that where it is sent and what is
+/// sent are always read from the same place, in one read.
+pub fn bind(host: &str, password: &str) -> Result<String, String> {
+    if password.is_empty() || has_line_break(password) {
+        return Err("The app password is not valid.".into());
+    }
+    let host = host_of(Some(host));
+    if !valid_host(&host) {
+        return Err("The mail server's name is not valid.".into());
+    }
+    Ok(format!("{host}\n{password}"))
+}
+
+/// The server and the password of a stored entry. None for an entry that does
+/// not say its server (none was ever stored that way; it is asked for again).
+pub fn bound(stored: &str) -> Option<(String, String)> {
+    let (host, password) = stored.split_once('\n')?;
+    (valid_host(host) && !password.is_empty()).then(|| (host.to_string(), password.to_string()))
+}
+
 /// True when storing `new_host` would send the password somewhere other than
 /// where it goes today. A password belongs to the server it was entered for:
 /// when the server changes, the password is forgotten and asked for again, so
@@ -531,6 +552,21 @@ mod tests {
         assert!(!valid_host("imap.gmail.com/x"));
         assert!(!valid_host("localhost"));
         assert!(!valid_host("a b.com"));
+    }
+
+    #[test]
+    fn a_password_is_kept_with_its_server() {
+        let stored = bind("", "abcd efgh ijkl mnop").unwrap();
+        assert_eq!(bound(&stored), Some(("imap.gmail.com".into(), "abcd efgh ijkl mnop".into())));
+        let stored = bind(" IMAP.Fastmail.com ", "pw").unwrap();
+        assert_eq!(bound(&stored).unwrap().0, "imap.fastmail.com");
+        // Nothing that could break the entry, or name no server, is stored.
+        assert!(bind("", "a\nb").is_err());
+        assert!(bind("evil/x", "pw").is_err());
+        assert!(bind("", "").is_err());
+        // An entry without its server is not used.
+        assert_eq!(bound("just-a-password"), None);
+        assert_eq!(bound("not a host\npw"), None);
     }
 
     #[test]

@@ -969,6 +969,21 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
     }
 
     if (def.hint) rows.append(h("div", { class: "hint", text: t(def.hint) }));
+    if (def.id === "integration_mail") {
+      // Where the stored password goes, said plainly: it is kept with this server.
+      const server = h("div", { class: "hint" });
+      rows.append(server);
+      const say = () =>
+        void Bridge.mailServer().then((host) => {
+          server.textContent = host
+            ? `The app password is kept for ${host}. Changing the server asks for it again.`
+            : "No app password stored yet.";
+        });
+      say();
+      rows.addEventListener("click", (e) => {
+        if ((e.target as HTMLElement).tagName === "BUTTON") window.setTimeout(say, 300);
+      });
+    }
     if (def.id === "integration_spotify") {
       // As on the Mac's row: said only when there is no Spotify to launch.
       const hint = h("div", { class: "hint", style: "padding-top:5px" });

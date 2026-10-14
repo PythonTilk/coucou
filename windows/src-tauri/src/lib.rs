@@ -567,8 +567,24 @@ fn secret_present(key: String) -> bool {
     secrets::present(&key)
 }
 
+/// The server the Mail pill logs in to, as stored with its password: what
+/// Settings shows, so the user sees where the password goes. None without one.
+#[tauri::command]
+fn mail_server() -> Option<String> {
+    secrets::get(mail::PASSWORD_KEY).and_then(|stored| mail::bound(&stored)).map(|(host, _)| host)
+}
+
 #[tauri::command]
 fn secret_set(app: AppHandle, key: String, value: String) -> Result<(), String> {
+    // The mail password is stored with the server it is entered for, in the
+    // same entry: the server cannot be changed under it afterwards.
+    if key == mail::PASSWORD_KEY {
+        if value.is_empty() {
+            return secrets::clear(mail::PASSWORD_KEY);
+        }
+        let host = secrets::get(mail::HOST_KEY).unwrap_or_default();
+        return secrets::set(mail::PASSWORD_KEY, &mail::bind(&host, &value)?);
+    }
     // Bound to its server's address: only local_set_key may store it.
     if key == local_chat::CUSTOM_KEY {
         return Err("use local_set_key".into());
@@ -813,6 +829,7 @@ pub fn run() {
             shelf_drag_icon,
             clipboard_file,
             claude_cli_present,
+            mail_server,
             update_status,
             update_check,
             update_install,

@@ -367,6 +367,8 @@ export const Bridge = {
 
   /** Only ever tells you whether a key exists — never its value. */
   secretPresent: (key: string) => call<boolean>("secret_present", { key }),
+  /** The server the Mail pill logs in to, as stored with its password. */
+  mailServer: () => call<string | null>("mail_server"),
   secretSet: (key: string, value: string) => callOrThrow<void>("secret_set", { key, value }),
   secretClear: (key: string) => callOrThrow<void>("secret_clear", { key }),
 

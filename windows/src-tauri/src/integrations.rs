@@ -110,6 +110,11 @@ where
 
 /// One-shot refresh from the Refresh buttons in the island.
 pub async fn poll_once(app: AppHandle, id: &str) {
+    // The Refresh buttons obey the same rule as the timers: an integration that
+    // is off, or a paused app, makes no request at all.
+    if PAUSED.load(Ordering::Relaxed) || !enabled(&app, id) {
+        return;
+    }
     match id {
         "integration_stripe" => poll_stripe(app).await,
         "integration_github" => {
@@ -803,12 +808,32 @@ async fn poll_mail(app: AppHandle) {
     if PAUSED.load(Ordering::Relaxed) || !enabled(&app, "integration_mail") {
         return;
     }
-    let (Some(address), Some(password)) =
+    let (Some(address), Some(stored)) =
         (secrets::get(crate::mail::ADDRESS_KEY), secrets::get(crate::mail::PASSWORD_KEY))
     else {
         return;
     };
-    let host = crate::mail::host_of(secrets::get(crate::mail::HOST_KEY).as_deref());
+    // Where the password goes is read with the password, from the same entry:
+    // nothing changed between two reads can send it elsewhere.
+    let Some((host, password)) = crate::mail::bound(&stored) else {
+        emit(&app, IntegrationUpdate {
+            id: "integration_mail",
+            data: json!({}),
+            error: Some("Enter the app password again in Settings.".into()),
+            event: None,
+        });
+        return;
+    };
+    // The server named in Settings has changed since: the password is not for it.
+    if crate::mail::host_of(secrets::get(crate::mail::HOST_KEY).as_deref()) != host {
+        emit(&app, IntegrationUpdate {
+            id: "integration_mail",
+            data: json!({}),
+            error: Some("The server changed. Enter the app password again in Settings.".into()),
+            event: None,
+        });
+        return;
+    }
     match crate::mail::fetch(&host, address.trim(), &password).await {
         Ok(inbox) => {
             let newest = inbox.messages.first();
