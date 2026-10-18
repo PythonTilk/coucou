@@ -70,14 +70,6 @@ pub struct Settings {
     /// ("fr", "pt-BR", "zh-Hans"…). Kept as it comes, like `mochi_outfit`: a
     /// code this build doesn't know reads as "".
     pub language: String,
-    /// A new song opens the island on Spotify's card for a moment, then it
-    /// folds back (src/island/spotify.ts). Off by default: the island
-    /// otherwise never opens for news that asks nothing.
-    pub announce_songs: bool,
-    /// Mochi dances to the song's own beat, heard in what the computer plays
-    /// (beat.rs, Windows). Off by default: listening is for the user to ask
-    /// for. The page reads it (src/island/spotify.ts), not this side.
-    pub dance_to_beat: bool,
     /// Ask this build's own releases, a few times a day, whether a newer build
     /// exists (updates.rs). Local to this build. On by default; installing is
     /// always the user's click.
@@ -168,8 +160,6 @@ impl Default for Settings {
             pill_colors: BTreeMap::new(),
             pill_outfits: BTreeMap::new(),
             language: String::new(),
-            announce_songs: false,
-            dance_to_beat: false,
             check_for_updates: true,
             desktop_mochi: DesktopMochiPref::default(),
             phone_link: false,
@@ -459,8 +449,6 @@ mod tests {
   "pillColors": { "integration_claude": "#2DD4BF" },
   "pillOutfits": { "integration_github": "santaHat" },
   "language": "pt-BR",
-  "announceSongs": true,
-  "danceToBeat": true,
   "checkForUpdates": false,
   "desktopMochi": { "onDesktop": true, "spot": { "x": 1500.5, "y": -300.0, "space": "screen" } },
   "phoneLink": true,
@@ -718,24 +706,10 @@ mod tests {
     }
 
     #[test]
-    fn a_file_from_before_new_songs_were_announced_keeps_the_island_shut() {
-        assert!(parse(CUSTOM.as_bytes()).unwrap().announce_songs);
-        assert!(!parse(&custom_with("announceSongs", None)).unwrap().announce_songs);
-        assert!(!Settings::default().announce_songs);
-    }
-
-    #[test]
     fn a_file_from_before_updates_checks_for_them() {
         assert!(!parse(CUSTOM.as_bytes()).unwrap().check_for_updates);
         assert!(parse(&custom_with("checkForUpdates", None)).unwrap().check_for_updates);
         assert!(Settings::default().check_for_updates);
-    }
-
-    #[test]
-    fn a_file_from_before_the_beat_could_be_heard_is_not_listened_for() {
-        assert!(parse(CUSTOM.as_bytes()).unwrap().dance_to_beat);
-        assert!(!parse(&custom_with("danceToBeat", None)).unwrap().dance_to_beat);
-        assert!(!Settings::default().dance_to_beat);
     }
 
     #[test]
@@ -991,8 +965,6 @@ mod tests {
                 "pillColors",
                 "pillOutfits",
                 "language",
-                "announceSongs",
-                "danceToBeat",
                 "checkForUpdates",
                 "desktopMochi",
                 "phoneLink",

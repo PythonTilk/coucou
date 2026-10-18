@@ -50,8 +50,6 @@ export class IslandStateMachine {
 
   private homeDelay = 15;
   private byHover = false;
-  /** Open for a glance: folds after this many seconds instead of `homeDelay`. */
-  private glanceDelay: number | null = null;
   private petitHide: number | null = null;
   private homeCollapse: number | null = null;
   private greetCollapse: number | null = null;
@@ -80,8 +78,6 @@ export class IslandStateMachine {
         break;
       case "home":
         this.clear("homeCollapse");
-        // The mouse came: a glance is now an open island like any other.
-        this.glanceDelay = null;
         break;
       case "coucou":
         this.scheduleGreetCollapse(this.greetHoverCollapseDelay);
@@ -130,12 +126,10 @@ export class IslandStateMachine {
   /**
    * The user clicked inside the island: a hover-opened island now stays like
    * any open island (normal auto-close) instead of folding once the pointer leaves.
-   * The same for a glance somebody took over.
    */
   userInteracted() {
-    if (!this.byHover && this.glanceDelay == null) return;
+    if (!this.byHover) return;
     this.byHover = false;
-    this.glanceDelay = null;
     // The short countdown already running becomes the normal one.
     if (this.state === "home" && this.homeCollapse != null) this.scheduleHomeCollapse();
   }
@@ -143,20 +137,7 @@ export class IslandStateMachine {
   /** Alert or explicit request: open straight to expanded. */
   forceHome() {
     this.byHover = false;
-    this.glanceDelay = null;
     this.cancelTimers();
-    this.transition("home");
-  }
-
-  /**
-   * News that asks nothing (a new song): open, and fold `seconds` after the
-   * mouse is found elsewhere, whatever the auto-close preference. The mouse
-   * coming, or a click, makes it an open island like any other.
-   */
-  glance(seconds: number) {
-    this.byHover = false;
-    this.cancelTimers();
-    this.glanceDelay = seconds;
     this.transition("home");
   }
 
@@ -189,7 +170,7 @@ export class IslandStateMachine {
   private scheduleHomeCollapse() {
     this.clear("homeCollapse");
     if (this.pinned) return;
-    const ms = (this.byHover ? this.hoverCloseDelay : (this.glanceDelay ?? this.homeDelay)) * 1000;
+    const ms = (this.byHover ? this.hoverCloseDelay : this.homeDelay) * 1000;
     this.homeCollapseDueAt = performance.now() + ms;
     this.homeCollapse = window.setTimeout(() => {
       this.homeCollapse = null;
@@ -227,7 +208,6 @@ export class IslandStateMachine {
     if (next === this.state) return;
     const from = this.state;
     this.state = next;
-    if (from === "home") this.glanceDelay = null;
     this.onTransition?.(from, next);
   }
 }

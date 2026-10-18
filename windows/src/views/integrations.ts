@@ -150,7 +150,7 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
     { class: "int-card" },
     header(
       task.color,
-      task.id === "integration_claude" ? "VS Code" : task.name,
+      task.id === "integration_claude" ? def!.name : task.name,
       t(def?.subtitle ?? N_("Integration")),
     ),
     h("div", { class: "int-status" }, dot(status.color, 5), h("span", { text: status.label })),
@@ -340,7 +340,7 @@ export function whenLabel(startMs: number, allDay: boolean, now = new Date()): s
   const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((midnight(when) - midnight(now)) / 86_400_000);
   const day =
-    days === 0 ? "Today"
+    days === 0 ? t("Today")
     : days === 1 ? "Tomorrow"
     : days < 7 ? when.toLocaleDateString(undefined, { weekday: "short" })
     : when.toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" });
@@ -352,7 +352,7 @@ export function whenLabel(startMs: number, allDay: boolean, now = new Date()): s
 export function mailAge(dateMs: number, now = Date.now()): string {
   if (!dateMs) return "";
   const minutes = Math.floor((now - dateMs) / 60_000);
-  if (minutes < 1) return "now";
+  if (minutes < 1) return t("now");
   if (minutes < 60) return `${minutes} min`;
   if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h`;
   const when = new Date(dateMs);
@@ -394,7 +394,7 @@ function mailCard(): HTMLElement {
     }
     rows.append(row);
   });
-  const kind = unread === 0 ? "Inbox" : `${unread} unread`;
+  const kind = unread === 0 ? t("Inbox") : `${unread} unread`;
   return h("div", { class: "int-card" }, header(accent, "Mail", kind), rows);
 }
 

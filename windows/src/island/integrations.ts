@@ -2,6 +2,7 @@
 // pollers: a genuinely new item flips the pill to finished/error, badges it when
 // the pill isn't focused, plays a sound, and clears itself after 60 s.
 
+import { t } from "../i18n/i18n";
 import { onEvent, Bridge, type IntegrationUpdate } from "../core/bridge";
 import { gitHubAlert, type GitHubEvent } from "../core/github";
 import { availablePills } from "../core/pills";
@@ -34,7 +35,7 @@ function nudgeForCalendar(island: Island) {
     if (minutes > NUDGE_MINUTES || minutes < -1 || nudged.has(key)) continue;
     nudged.add(key);
 
-    const soon = minutes < 1 ? "now" : `in ${Math.round(minutes)} min`;
+    const soon = minutes < 1 ? t("now") : `in ${Math.round(minutes)} min`;
     task.steps = [`${event.title} ${soon}`, ...(event.location ? [event.location] : [])];
     task.stepIndex = 0;
     if (State.focusId !== CALENDAR_ID) task.pillBadge = "approval";

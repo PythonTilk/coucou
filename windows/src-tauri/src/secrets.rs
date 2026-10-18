@@ -29,6 +29,8 @@ pub const KNOWN_KEYS: &[&str] = &[
     "ntfy-topic-url",
     // Read-only access to the private repository this build updates from (updates.rs).
     "updates-token",
+    // « OK Coucou »'s answers in an ElevenLabs voice.
+    "elevenlabs-api-key",
 ];
 
 fn entry(key: &str) -> Option<Entry> {

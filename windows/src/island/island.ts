@@ -122,8 +122,6 @@ export class Island {
 
   /** The next reveal from hidden makes no peek (music starting, as on macOS). */
   private silentReveal = false;
-  /** Open on its own for a moment (glance): who to tell how it ended. */
-  private glanceDone: ((untouched: boolean) => void) | null = null;
 
   /** Drop sequence bookkeeping: last tick played, and whether the ✓ has fired. */
   private uploadTens = 0;
@@ -371,11 +369,9 @@ export class Island {
     const prev = State.mode;
     if (mode === prev) return;
     State.mode = mode;
-    // A glance opens and folds without a sound: it is not the user's doing.
-    const quiet = this.glanceDone != null;
-    if (mode === "expanded" && !quiet) Sound.play("open");
+    if (mode === "expanded") Sound.play("open");
     if (prev === "expanded") {
-      if (!quiet) Sound.play("close");
+      Sound.play("close");
       // A folded card is still waiting: it keeps the island pinned.
       if (!State.pendingApproval) State.isPinned = false;
       void Bridge.focusWindow(false);
@@ -390,8 +386,6 @@ export class Island {
     }
     this.updateWindowCollapsed();
     this.animateGeometry(modeOrder(mode) < modeOrder(prev));
-    // Still a glance when the island folds: nobody took it over.
-    if (prev === "expanded") this.endGlance(true);
     State.notify();
   }
 
@@ -416,7 +410,6 @@ export class Island {
   }
 
   setView(view: IslandViewName) {
-    this.endGlance(false);
     this.stopSequenceIfLeaving(view);
     if (view !== "overview") closePlanCard();
     if (State.mode !== "expanded") {
@@ -449,7 +442,6 @@ export class Island {
 
   /** Alert from the hook server: open on this view. Pinned alerts never auto-close. */
   alert(view: IslandViewName) {
-    this.endGlance(false);
     this.fsm.pinned = State.isPinned;
     this.fsm.forceHome();
     this.expand(view);
@@ -464,33 +456,6 @@ export class Island {
     this.silentReveal = true;
     this.fsm.reveal();
     this.silentReveal = false;
-  }
-
-  /**
-   * News that asks nothing (a new song): the island opens on the overview for
-   * `seconds`, without a sound, and folds back. The mouse coming, a key or an
-   * alert makes it an open island like any other. Never over an island that is
-   * open, under the mouse, pinned or waiting for an answer: false then.
-   * `done(untouched)` says how it ended; a glance asked for during a glance
-   * carries on from it.
-   */
-  glance(seconds: number, done: (untouched: boolean) => void): boolean {
-    const waiting = State.isPinned || State.pendingApproval != null ||
-      State.tasks.some((t) => t.state === "question" || t.state === "approval");
-    if (this.glanceDone == null && (State.mode === "expanded" || this.wasInIsland || waiting)) return false;
-    this.glanceDone = done;
-    this.fsm.glance(seconds);
-    this.expand("overview");
-    if (!this.wasInIsland) this.fsm.mouseLeft();
-    return true;
-  }
-
-  private endGlance(untouched: boolean) {
-    const done = this.glanceDone;
-    if (!done) return;
-    this.glanceDone = null;
-    if (!untouched) this.fsm.userInteracted();
-    done(untouched);
   }
 
   /** Right-click on Mochi: wardrobe open ↔ back to the usual view. */
@@ -855,7 +820,8 @@ export class Island {
     this.greetingCanvas.style.left = `${(w - EXPANDED_W) / 2}px`;
     this.uploadCanvas.el.style.left = `${(w - EXPANDED_W) / 2}px`;
 
-    const rect = { x: (PANEL_W - w) / 2, y: 0, w, h: hh };
+    const viewportW = window.innerWidth > 0 ? window.innerWidth : PANEL_W;
+    const rect = { x: (viewportW - w) / 2, y: 0, w, h: hh };
     const p = this.pushedRect;
     if (Math.abs(p.x - rect.x) > 0.5 || Math.abs(p.w - rect.w) > 0.5 || Math.abs(p.h - rect.h) > 0.5) {
       this.pushedRect = rect;
@@ -867,7 +833,8 @@ export class Island {
   private islandRect(): { x: number; y: number; w: number; h: number } {
     const w = this.width.value;
     const hh = this.height.value;
-    return { x: (PANEL_W - w) / 2, y: 0, w, h: hh };
+    const viewportW = window.innerWidth > 0 ? window.innerWidth : PANEL_W;
+    return { x: (viewportW - w) / 2, y: 0, w, h: hh };
   }
 
   // ── Window collapse (hidden → tiny wake strip, zero polling) ────────────────
@@ -960,7 +927,6 @@ export class Island {
     // a terminal — so it may fold a waiting card away, as Escape in the notch
     // does on macOS.
     window.addEventListener("keydown", (e) => {
-      this.endGlance(false);
       if (e.key === "Escape" && State.mode === "expanded") {
         if (State.pendingApproval) this.foldApproval();
         else if (!State.isPinned) this.collapse();
@@ -1030,7 +996,6 @@ export class Island {
     this.wasInIsland = inIsland;
     if (inIsland && !wasIn) {
       if (this.fsm.state === "coucou") this.greeting.hover();
-      this.endGlance(false);
       this.fsm.mouseEntered();
     }
     if (!inIsland && wasIn) {

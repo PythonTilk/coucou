@@ -169,18 +169,6 @@ export interface Settings {
    */
   language: string;
   /**
-   * A new song opens the island on Spotify's card for a moment (Settings →
-   * Integrations → Spotify). Off by default: the island otherwise never opens
-   * for news that asks nothing.
-   */
-  announceSongs: boolean;
-  /**
-   * Mochi dances to the song's own beat (Settings → Integrations → Spotify,
-   * Windows). Off by default: finding the beat means listening to what the
-   * computer plays, which is for the user to ask for.
-   */
-  danceToBeat: boolean;
-  /**
    * Ask this build's own releases, a few times a day, whether a newer build
    * exists (Settings → Updates). Local to this build; installing is always a click.
    */
@@ -230,8 +218,6 @@ export const DEFAULT_SETTINGS: Settings = {
   pillColors: {},
   pillOutfits: {},
   language: "",
-  announceSongs: false,
-  danceToBeat: false,
   checkForUpdates: true,
 };
 

@@ -2,7 +2,8 @@
 // (SpotifyViews.swift) and the shared now-playing pieces (NowPlayingViews.swift
 // and MusicControlButton). Sizes, colours and wording are the Mac's.
 //
-// What they show comes from src-tauri/src/spotify.rs through
+// What they show comes from src-tauri/src/spotify.rs (MPRIS on Linux, the
+// system media controls on Windows) through
 // island/spotify.ts. A click changes the page's copy at once and Spotify
 // confirms it, as the Mac's controller does.
 
@@ -11,8 +12,7 @@ import { ICONS } from "./icons";
 import { Bridge } from "../core/bridge";
 import { State, type AgentTask } from "../core/state";
 import {
-  ANNOUNCE_SECONDS, SPOTIFY_GREEN, SPOTIFY_ID, Spotify, currentArtwork, formatTime, isAd, spotifyPosition,
-  volumeLevel, withPlaying,
+  SPOTIFY_GREEN, SPOTIFY_ID, Spotify, currentArtwork, formatTime, isAd, spotifyPosition, volumeLevel, withPlaying,
   type SpotifyTrack,
 } from "../core/spotify";
 import { createMiniBot } from "../mochi/minibots";
@@ -325,8 +325,6 @@ export function buildSpotifyCard(): SpotifyCardHost {
   let playIcon: boolean | null = null;
   let volIconLevel = -1;
   let timer: number | null = null;
-  /** The announcement the card is lit for (Spotify.announcing). */
-  let lit = 0;
 
   function paintProgress() {
     const s = Spotify.state;
@@ -381,8 +379,6 @@ export function buildSpotifyCard(): SpotifyCardHost {
     progress.enabled = !isAd(track) && track.duration > 0;
     paintProgress();
 
-    // Where they cannot work (see SpotifyState.modes) they are left out, and the three others close up.
-    shuffle.style.display = repeat.style.display = s.modes ? "" : "none";
     shuffle.style.color = s.shuffle ? green : "#6B7079";
     shuffle.title = s.shuffle ? t("Shuffle on") : t("Shuffle off");
     repeat.style.color = s.repeat ? green : "#6B7079";
@@ -430,20 +426,6 @@ export function buildSpotifyCard(): SpotifyCardHost {
       if (track) syncPlaying(track);
       else syncIdle();
       syncTimer();
-      // A new song is being announced: its light plays once, and again for the next.
-      if (lit !== Spotify.announcing) {
-        lit = Spotify.announcing;
-        el.classList.remove("announce");
-        if (lit) {
-          // The light is the colour of the Mochi it shines behind: the pill's
-          // own, or the one picked for it in Settings → Active pills.
-          const v = parseInt((State.tasks.find((x) => x.id === SPOTIFY_ID)?.color ?? green).replace("#", ""), 16);
-          el.style.setProperty("--np-light", `${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}`);
-          el.style.setProperty("--np-announce", `${ANNOUNCE_SECONDS}s`);
-          void el.offsetWidth;
-          el.classList.add("announce");
-        }
-      }
     },
   };
 }
