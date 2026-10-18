@@ -39,7 +39,6 @@ mod spotify;
 mod taktus;
 mod tray;
 mod updates;
-mod voice;
 #[cfg(windows)]
 mod webview_drop;
 
@@ -746,20 +745,6 @@ async fn phone_alert_test() -> Result<bool, String> {
     alerts::send(alerts::Kind::Finished, "Coucou test", true).await
 }
 
-/// Voice: one spoken phrase as text ("" when nothing was said in time).
-#[tauri::command]
-async fn voice_listen() -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(voice::listen)
-        .await
-        .map_err(|_| "Speech recognition stopped unexpectedly.".to_string())?
-}
-
-/// Voice: Claude's answer to what was heard, given what the island shows.
-#[tauri::command]
-async fn voice_answer(heard: String, context: String) -> Result<String, String> {
-    voice::answer(&heard, &context).await
-}
-
 /// What is known about updates, without asking the network.
 #[tauri::command]
 fn update_status(app: AppHandle, updates: State<updates::Updates>) -> updates::UpdateStatus {
@@ -864,10 +849,8 @@ pub fn run() {
             claude_cli_present,
             mail_server,
             update_status,
-            voice_listen,
             phone_alert,
             phone_alert_test,
-            voice_answer,
             update_check,
             update_install,
             secret_present,

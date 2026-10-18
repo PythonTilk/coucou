@@ -3954,17 +3954,6 @@
    "pt-BR": "O Mochi ouve o que o computador toca, alguns segundos por vez, para encontrar o andamento da música. Nada é gravado nem enviado.",
    "ru": "Mochi слушает то, что играет компьютер, по несколько секунд за раз, чтобы определить темп трека. Ничего не записывается и не отправляется.",
    "id": "Mochi mendengarkan apa yang diputar komputer, beberapa detik setiap kali, untuk menemukan tempo lagu. Tidak ada yang direkam atau dikirim."
-  },
-  "Talk to Mochi": {
-   "zh-Hans": "和 Mochi 说话",
-   "hi": "Mochi से बात करें",
-   "es": "Hablar con Mochi",
-   "ar": "تحدث إلى Mochi",
-   "fr": "Parler à Mochi",
-   "bn": "Mochi-র সাথে কথা বলুন",
-   "pt-BR": "Falar com o Mochi",
-   "ru": "Поговорить с Mochi",
-   "id": "Bicara dengan Mochi"
   }
  }
 }

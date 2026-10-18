@@ -135,14 +135,6 @@ fn interpret(response: &Value) -> Result<(Vec<Value>, String), String> {
     Ok((blocks, text))
 }
 
-/// One request outside the chat (voice.rs): `body` as built by the caller,
-/// the user's own key, the answer's text.
-pub async fn ask(body: &Value) -> Result<String, String> {
-    let key = secrets::get(KEY).ok_or_else(|| t("API key missing. Open settings."))?;
-    let response = call(&endpoint()?, &key, body).await?;
-    interpret(&response).map(|(_, text)| text)
-}
-
 /// One chat turn. Returns the assistant's text, or a message the island shows
 /// in the note view.
 pub async fn send(

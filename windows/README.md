@@ -163,10 +163,6 @@ whatever the interface language:
   posts a short notice to your own ntfy topic: who and what kind of thing,
   never the command or the question. Tapping it opens Islet on the iPhone.
   **Settings… → Integrations → Phone alerts**.
-- **Voice** — press **Ctrl+Alt+V**, ask something, and Mochi answers on the
-  island and out loud. Windows' own speech recognition hears the question
-  (its "Online speech recognition" switch must be on); Claude answers with your
-  API key, knowing what the island shows. Press again to stop him talking.
 - **Mail pill** — the newest messages of an inbox, read over IMAP: sender,
   subject and age, unread ones marked, a click opens the conversation in Gmail.
   Read-only by construction (EXAMINE and PEEK: nothing is marked as read) and

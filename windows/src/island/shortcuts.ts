@@ -7,7 +7,6 @@
 // island has the keyboard: it takes it for the chat, and when a global
 // shortcut opens it.
 
-import { talk } from "./voice";
 import { Bridge, onEvent } from "../core/bridge";
 import type { BotEmoteName, IslandViewName } from "../core/layout";
 import { cyclePill, islandKeyAction, navigate, pillByNumber, type IslandKeyAction } from "../core/shortcuts";
@@ -123,12 +122,6 @@ export function runGlobalShortcut(host: ShortcutHost, action: string, resume: ()
 
     // The Mac's ⌃⌥D. Sending him out lifts Pause, as the other shortcuts do;
     // where he can't leave the island, Mochi says so.
-    // Local to this build: a spoken question, a spoken answer (island/voice.ts).
-    case "voiceTalk":
-      resume();
-      void talk(host);
-      break;
-
     case "desktopToggle":
       if (!host.canLeaveIsland()) {
         host.emote("annoyed");

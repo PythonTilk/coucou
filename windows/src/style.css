@@ -2866,31 +2866,3 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
   text-overflow: ellipsis;
   min-width: 0;
 }
-
-/* The voice card (views/voice.ts): what was heard, and the answer. */
-.voice-label {
-  font: 600 11px var(--font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.voice-heard {
-  font: 400 12px var(--font);
-  color: var(--dim, #9398a1);
-  margin-top: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.voice-text {
-  font: 500 14px/1.35 var(--font);
-  margin-top: 6px;
-  max-height: 76px;
-  overflow-y: auto;
-}
-
-.voice-text.error {
-  color: #f4505e;
-  font-size: 12.5px;
-}

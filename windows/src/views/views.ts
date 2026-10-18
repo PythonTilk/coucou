@@ -2,7 +2,6 @@
 // colours and wording are copied from the Swift views so both platforms read
 // identically.
 
-import { buildVoice } from "./voice";
 import { clickedRequest } from "../core/approval-guard";
 import { buildDrop } from "./drop";
 import { buildFocus } from "./focus";
@@ -854,7 +853,6 @@ export function buildViews(
   map.set("prompt", buildPrompt(onChatHeightChange, actions));
   map.set("shelf", buildShelf(actions));
   map.set("focus", buildFocus(actions));
-  map.set("voice", buildVoice());
   map.set("drop", buildDrop());
   map.set("upload", buildUpload());
   map.set("uploading", buildUploading());

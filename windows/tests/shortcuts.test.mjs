@@ -17,8 +17,6 @@ import { DEFAULT_SETTINGS, State } from "../src/core/state.ts";
 const MAC_IDS = [
   "toggleIsland", "openChat", "goToAlert", "jumpToTerminal", "attachFrontWindow",
   "nextPill", "prevPill", "muteToggle", "desktopToggle", "wardrobeToggle",
-  // Not the Mac's: this build's voice shortcut (island/voice.ts).
-  "voiceTalk",
 ];
 
 // ── Defaults (testDefaultsExhaustive, testAllDefaultsHaveModifier, testNoDefaultDuplicates) ──
@@ -82,7 +80,7 @@ test("only the island toggle is off by default; the one not ported yet is reserv
   }
   assert.deepEqual(activeKeys({}).map(([id]) => id), [
     "openChat", "goToAlert", "jumpToTerminal", "nextPill", "prevPill", "muteToggle", "desktopToggle",
-    "wardrobeToggle", "voiceTalk",
+    "wardrobeToggle",
   ]);
   // The Mac's ⌃⌥D, on the same letter.
   assert.equal(SHORTCUTS.find((d) => d.id === "desktopToggle").defaultKeys, "Ctrl+Alt+D");

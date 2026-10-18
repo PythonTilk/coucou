@@ -373,9 +373,6 @@ export const Bridge = {
   phoneAlert: (kind: "approval" | "question" | "finished" | "error", agent: string) =>
     call<boolean>("phone_alert", { kind, agent }),
   phoneAlertTest: () => callOrThrow<boolean>("phone_alert_test"),
-  // Voice (voice.rs): a phrase heard, then Claude's answer to it.
-  voiceListen: () => callOrThrow<string>("voice_listen"),
-  voiceAnswer: (heard: string, context: string) => callOrThrow<string>("voice_answer", { heard, context }),
   secretSet: (key: string, value: string) => callOrThrow<void>("secret_set", { key, value }),
   secretClear: (key: string) => callOrThrow<void>("secret_clear", { key }),
 
