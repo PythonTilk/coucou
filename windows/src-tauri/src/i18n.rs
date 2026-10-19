@@ -255,7 +255,7 @@ mod tests {
         assert_eq!(resolve("", &sys(&["fr_FR.UTF-8"])), "fr");
         assert_eq!(resolve("", &sys(&["pt-PT"])), "pt-BR");
         assert_eq!(resolve("", &sys(&["zh-CN"])), "zh-Hans");
-        assert_eq!(resolve("", &sys(&["zh-TW", "de", "es-MX"])), "es");
+        assert_eq!(resolve("", &sys(&["zh-TW", "nl", "es-MX"])), "es");
         assert_eq!(resolve("", &sys(&["de-DE"])), "de");
         assert_eq!(resolve("", &sys(&["nl-NL"])), "en");
         assert_eq!(resolve("xx", &[]), "en");
