@@ -53,9 +53,11 @@ fn pending() -> &'static Mutex<HashMap<u64, mpsc::Sender<String>>> {
 }
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-/// Whether « OK Coucou » can run: the voice model and a Claude key.
+/// Whether « OK Coucou » can run: the voice model, and a Claude key or (in
+/// this build) Claude Code signed in to a subscription.
 pub fn requirements_met() -> bool {
-    speech::is_ready() && crate::secrets::present(crate::claude::KEY)
+    speech::is_ready()
+        && (crate::secrets::present(crate::claude::KEY) || crate::claude_cli::find_claude().is_some())
 }
 
 /// Starts or stops listening to follow the preference.

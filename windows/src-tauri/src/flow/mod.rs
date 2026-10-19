@@ -447,6 +447,9 @@ pub struct FlowStatus {
     /// "ok", or why the key can't be watched here ("wayland", "no-display").
     keys: String,
     has_claude_key: bool,
+    /// Claude Code is installed: the Notetaker and « OK Coucou » answer on the
+    /// subscription without a key (this build).
+    has_claude_code: bool,
     mics: Vec<audio::InputDevice>,
     platform: &'static str,
     /// Coucou started with the computer.
@@ -465,6 +468,7 @@ pub fn flow_status(flow: State<Arc<Flow>>) -> FlowStatus {
             Err(why) => why.into(),
         },
         has_claude_key: cleanup::has_key(),
+        has_claude_code: crate::claude_cli::find_claude().is_some(),
         mics: audio::input_devices(),
         platform: if cfg!(windows) { "windows" } else { "linux" },
         autostarted: crate::launched_at_login(),

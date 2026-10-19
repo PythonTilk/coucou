@@ -163,7 +163,14 @@ pub async fn send(
 /// One question, one answer, no history: the dictation clean-up and the notes
 /// of a call. The text of the answer, or why there is none.
 pub async fn complete(model: &str, system: &str, user: &str, max_tokens: u32, timeout: Duration) -> Result<String, String> {
-    let key = secrets::get(KEY).ok_or_else(|| t("API key missing. Open settings."))?;
+    // Local to this build: without a key, the user's Claude subscription
+    // answers through Claude Code (claude_cli.rs).
+    let Some(key) = secrets::get(KEY) else {
+        if crate::claude_cli::find_claude().is_some() {
+            return crate::claude_cli::complete(model, system, user).await;
+        }
+        return Err(t("API key missing. Open settings."));
+    };
     let endpoint = endpoint()?;
     let body = json!({
         "model": model,
@@ -182,10 +189,48 @@ pub async fn complete(model: &str, system: &str, user: &str, max_tokens: u32, ti
     Ok(text)
 }
 
+/// A conversation as plain text, oldest first, for a run that only reads text:
+/// what each side said, and what any tool gave back.
+pub fn conversation_text(messages: &[Value]) -> String {
+    let mut out = Vec::new();
+    for message in messages {
+        let who = if message["role"] == "assistant" { "You" } else { "User" };
+        let text = match &message["content"] {
+            Value::String(s) => s.clone(),
+            Value::Array(blocks) => blocks
+                .iter()
+                .filter_map(|b| match b["type"].as_str() {
+                    Some("text") => b["text"].as_str().map(str::to_string),
+                    Some("tool_result") => b["content"].as_str().map(|c| format!("(result: {c})")),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            _ => String::new(),
+        };
+        if !text.trim().is_empty() {
+            out.push(format!("{who}: {}", text.trim()));
+        }
+    }
+    out.join("\n\n")
+}
+
 /// One turn of « OK Coucou »'s conversation with tools: the API's whole answer
 /// (content blocks and stop_reason).
 pub async fn voice_turn(model: &str, system: &str, messages: &[Value], tools: &[Value]) -> Result<Value, String> {
-    let key = secrets::get(KEY).ok_or_else(|| t("API key missing. Open settings."))?;
+    // Local to this build: without a key, the subscription answers through
+    // Claude Code — in words only, as its tools are not « OK Coucou »'s.
+    let Some(key) = secrets::get(KEY) else {
+        if crate::claude_cli::find_claude().is_none() {
+            return Err(t("API key missing. Open settings."));
+        }
+        let system = format!(
+            "{system}\n\nIn this conversation you cannot use tools or act on the computer: answer in words only. \
+             If the user asks for an action, say briefly that it needs a Claude API key in Coucou."
+        );
+        let text = crate::claude_cli::complete(model, &system, &conversation_text(messages)).await?;
+        return Ok(json!({ "content": [{ "type": "text", "text": text }], "stop_reason": "end_turn" }));
+    };
     let endpoint = endpoint()?;
     let body = json!({
         "model": model,

@@ -76,7 +76,7 @@ const DEFAULT_STATUS: FlowStatus = {
   },
   models: { parakeet: { state: "missing" }, downloadMb: 700 },
   keys: "ok",
-  hasClaudeKey: false,
+  hasClaudeKey: false, hasClaudeCode: false,
   mics: [],
   platform: navigator.userAgent.includes("Windows") ? "windows" : "linux",
   autostarted: false,

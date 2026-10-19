@@ -99,6 +99,46 @@ pub async fn send(
     Ok(ChatReply { text })
 }
 
+/// One question outside the chat (the Notetaker's summary, « OK Coucou »),
+/// answered on the user's Claude subscription when there is no API key. No
+/// tools, nothing of the user's settings, and no session kept: one run, one
+/// answer. Local to this build.
+pub async fn complete(model: &str, system: &str, user: &str) -> Result<String, String> {
+    let exe = find_claude().ok_or_else(|| NOT_INSTALLED.to_string())?;
+    let dir = platform::local_dir().join("chat");
+    platform::ensure_private_dir(&dir).map_err(|e| e.to_string())?;
+    // A file of its own per run: a chat turn may be writing the chat's at the same time.
+    static RUNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let run_id = RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let system_prompt = dir.join(format!("oneshot-{}-{run_id}.txt", std::process::id()));
+    std::fs::write(&system_prompt, system).map_err(|e| e.to_string())?;
+    let args = oneshot_args(model, &system_prompt);
+    let prompt = user.to_string();
+    let workdir = dir.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || run(&exe, &args, &workdir, &prompt))
+        .await
+        .map_err(|e| e.to_string());
+    let _ = std::fs::remove_file(&system_prompt);
+    let (text, _) = parse_reply(&result??)?;
+    Ok(text)
+}
+
+/// The arguments of a one-off run: no tools at all.
+fn oneshot_args(model: &str, system_prompt: &Path) -> Vec<String> {
+    let mut args: Vec<String> = [
+        "-p", "--output-format", "json", "--model", model,
+        "--tools", "",
+        "--setting-sources", "",
+        "--strict-mcp-config",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    args.push("--system-prompt-file".into());
+    args.push(system_prompt.to_string_lossy().to_string());
+    args
+}
+
 /// The earlier turns as plain text, for a session that was not there for them.
 fn transcript(history: &[Value]) -> String {
     let mut out = String::from("Earlier in this conversation:");
@@ -258,6 +298,35 @@ fn error_message(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_one_off_question_runs_with_no_tools_and_no_settings() {
+        let args = oneshot_args("claude-haiku-4-5", Path::new("C:/x/oneshot.txt"));
+        let at = |flag: &str| args.iter().position(|a| a == flag).map(|i| args[i + 1].as_str());
+        assert_eq!(at("--model"), Some("claude-haiku-4-5"));
+        assert_eq!(at("--tools"), Some(""));
+        assert_eq!(at("--setting-sources"), Some(""));
+        assert!(args.contains(&"--strict-mcp-config".to_string()));
+        assert!(!args.iter().any(|a| a == "--resume" || a == "--allowedTools"));
+    }
+
+    #[test]
+    fn a_voice_conversation_reads_as_plain_text() {
+        let messages = vec![
+            json!({ "role": "user", "content": "What is running?" }),
+            json!({ "role": "assistant", "content": [{ "type": "text", "text": "Two agents." }, { "type": "tool_use", "id": "t" }] }),
+            json!({ "role": "user", "content": [{ "type": "tool_result", "content": "ok" }] }),
+        ];
+        assert_eq!(
+            crate::claude::conversation_text(&messages),
+            "User: What is running?
+
+You: Two agents.
+
+User: (result: ok)"
+        );
+    }
+
     use super::*;
 
     #[test]

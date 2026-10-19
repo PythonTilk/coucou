@@ -57,6 +57,8 @@ export interface FlowStatus {
   /** "ok", or why the key can't be watched ("wayland", "no-display"). */
   keys: string;
   hasClaudeKey: boolean;
+  /** Claude Code is installed: summaries and « OK Coucou » can use the subscription (this build). */
+  hasClaudeCode: boolean;
   mics: { name: string; default: boolean }[];
   platform: "windows" | "linux";
   autostarted: boolean;
