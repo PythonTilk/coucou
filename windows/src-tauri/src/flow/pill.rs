@@ -191,7 +191,10 @@ pub fn update(app: &AppHandle, change: impl FnOnce(&mut PillState)) {
     if visible && (!was || edge_changed) {
         place(app, &pill, &state.edge, state.phase == "listening");
     }
-    if visible != was {
+    // Hidden is made sure of every time, not only on a change: the pill now
+    // starts out of use, and a window never told to hide sits where it was
+    // created — the middle of the screen.
+    if !visible || visible != was {
         show(app, &pill, visible);
     }
 }
