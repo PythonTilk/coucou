@@ -11,6 +11,7 @@ mod codex_plan;
 mod config_file;
 mod desktop;
 mod files;
+mod fullscreen;
 mod flow;
 mod github;
 mod hooks;
@@ -1034,6 +1035,7 @@ pub fn run() {
             island::spawn_cursor_poll(handle.clone(), gate.clone());
             island::spawn_drag_watch(handle.clone(), gate.clone());
             updates::spawn(handle.clone());
+            fullscreen::spawn(handle.clone());
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             hooks::ensure_hook_exe(&handle);

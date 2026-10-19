@@ -182,7 +182,11 @@ pub fn update(app: &AppHandle, change: impl FnOnce(&mut PillState)) {
         (s.clone(), s.edge != edge_before)
     };
     let _ = app.emit_to(LABEL, "pill-state", &state);
-    let visible = state.enabled || state.note_started_at.is_some() || state.announcement.is_some() || state.voice.is_some() || state.phase != "idle";
+    // Local to this build: no resting pill. It shows while it is in use —
+    // a dictation, a call being recorded, « OK Coucou », a message — and not
+    // otherwise; over a fullscreen app, only for a dictation the user started.
+    let in_use = state.note_started_at.is_some() || state.announcement.is_some() || state.voice.is_some() || state.phase != "idle";
+    let visible = in_use && (!crate::fullscreen::active() || state.phase != "idle");
     let was = pill.shown.swap(visible, Ordering::Relaxed);
     if visible && (!was || edge_changed) {
         place(app, &pill, &state.edge, state.phase == "listening");

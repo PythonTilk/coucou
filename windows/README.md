@@ -158,6 +158,16 @@ whatever the interface language:
   provider chips and that provider's models in a full-width list. The model
   name above the chat box only switches between the picked provider's models,
   in a list that takes the island's full height while it is open.
+- **Out of the way of fullscreen** — while a video, a game or a presentation
+  is fullscreen, the island, Mochi on the desktop and the dictation pill hide,
+  and come back after. A dictation you start still shows its pill.
+- **No resting pill** — the dictation pill at the bottom shows only while it
+  is in use (dictating, recording a call, « OK Coucou », a message).
+- **German** — every string of the interface (Notch → General → Language →
+  Deutsch); a German Windows gets it under System.
+- **Claude subscription for the Notetaker and « OK Coucou »** — with no API
+  key and Claude Code installed, summaries and answers go through `claude -p`
+  on your plan. « OK Coucou » then answers in words only; its actions need a key.
 - **Phone alerts through ntfy** — while nobody is at the computer (no input
   for a minute), a permission request, a question, a finished turn or an error
   posts a short notice to your own ntfy topic: who and what kind of thing,
