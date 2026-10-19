@@ -17,8 +17,10 @@
 
 import MAC from "./strings.json";
 import EXTRA from "./extra.json";
+// German, local to this build: every string of both tables, written by hand.
+import DE from "./de.json";
 
-export const LANGUAGE_CODES = ["en", "zh-Hans", "hi", "es", "ar", "fr", "bn", "pt-BR", "ru", "id"] as const;
+export const LANGUAGE_CODES = ["en", "zh-Hans", "hi", "es", "ar", "fr", "bn", "pt-BR", "ru", "id", "de"] as const;
 export type Language = (typeof LANGUAGE_CODES)[number];
 
 /** The picker's entries, each in its own language, in the Mac's order. */
@@ -33,6 +35,7 @@ export const LANGUAGES: readonly { code: Language; name: string }[] = [
   { code: "pt-BR", name: "Português (Brasil)" },
   { code: "ru", name: "Русский" },
   { code: "id", name: "Bahasa Indonesia" },
+  { code: "de", name: "Deutsch" },
 ];
 
 export type Vars = Record<string, string | number>;
@@ -45,6 +48,10 @@ const TABLE: Table = {
   ...((MAC as { strings: Table }).strings),
   ...((EXTRA as { strings: Table }).strings),
 };
+// German goes into each entry next to the other languages, not over it.
+for (const [key, langs] of Object.entries((DE as { strings: Table }).strings)) {
+  TABLE[key] = { ...(TABLE[key] ?? {}), ...langs };
+}
 
 let current: Language = "en";
 const listeners = new Set<(lang: Language) => void>();

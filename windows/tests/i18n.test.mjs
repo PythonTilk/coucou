@@ -22,6 +22,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const WINDOWS = join(here, "..");
 const MAC = JSON.parse(readFileSync(join(WINDOWS, "src/i18n/strings.json"), "utf8"));
 const EXTRA = JSON.parse(readFileSync(join(WINDOWS, "src/i18n/extra.json"), "utf8"));
+const DE = JSON.parse(readFileSync(join(WINDOWS, "src/i18n/de.json"), "utf8"));
 const OTHERS = LANGUAGE_CODES.filter((l) => l !== "en");
 
 /** Runs `fn` in `lang`, then puts English back for the other tests. */
@@ -103,13 +104,15 @@ test("labels() tables and dates read in the current language", () => {
 
 test("System follows the system's language when Coucou has it, else English", () => {
   assert.equal(resolveLanguage("", ["fr-FR", "en-US"]), "fr");
-  assert.equal(resolveLanguage("", ["de-DE", "es-MX"]), "es");
+  // German is one of this build's: a German system gets German.
+  assert.equal(resolveLanguage("", ["de-DE", "es-MX"]), "de");
+  assert.equal(resolveLanguage("", ["nl-NL", "es-MX"]), "es");
   assert.equal(resolveLanguage("", ["pt-PT"]), "pt-BR");
   assert.equal(resolveLanguage("", ["pt"]), "pt-BR");
   assert.equal(resolveLanguage("", ["zh-CN"]), "zh-Hans");
   assert.equal(resolveLanguage("", ["zh-TW"]), "en"); // Traditional is not one of ours
   assert.equal(resolveLanguage("", ["ar-EG"]), "ar");
-  assert.equal(resolveLanguage("", ["de-DE"]), "en");
+  assert.equal(resolveLanguage("", ["nl-NL"]), "en");
   assert.equal(resolveLanguage("", []), "en");
   // A picked language wins; one this build doesn't know means System.
   assert.equal(resolveLanguage("ru", ["fr-FR"]), "ru");
@@ -117,7 +120,7 @@ test("System follows the system's language when Coucou has it, else English", ()
 });
 
 test("the picker offers the Mac's ten languages, Arabic reads right to left", () => {
-  assert.deepEqual(LANGUAGES.map((l) => l.code), ["en", "zh-Hans", "hi", "es", "ar", "fr", "bn", "pt-BR", "ru", "id"]);
+  assert.deepEqual(LANGUAGES.map((l) => l.code), ["en", "zh-Hans", "hi", "es", "ar", "fr", "bn", "pt-BR", "ru", "id", "de"]);
   assert.equal(isRtl("ar"), true);
   assert.equal(OTHERS.some((l) => l !== "ar" && isRtl(l)), false);
 });
@@ -163,10 +166,25 @@ test("the generator turns format specifiers into placeholders", () => {
 
 const placeholders = (s) => [...new Set(s.match(/\{\w+\}/g) ?? [])].sort();
 
+// German is not in these two: it has a table of its own (de.json), checked below.
+const MAC_LANGS = OTHERS.filter((l) => l !== "de");
+
+test("de.json: every string of both tables in German, with the key's placeholders", () => {
+  const de = DE.strings;
+  for (const key of [...Object.keys(MAC.strings), ...Object.keys(EXTRA.strings)]) {
+    const value = de[key]?.de;
+    assert.ok(value !== undefined, `de.json: ${JSON.stringify(key)} has no German`);
+    const forms = typeof value === "string" ? [value] : Object.values(value);
+    for (const form of forms) assert.deepEqual(placeholders(form), placeholders(key), JSON.stringify(key));
+  }
+  // And nothing the two tables no longer have.
+  for (const key of Object.keys(de)) assert.ok(key in MAC.strings || key in EXTRA.strings, `de.json: ${JSON.stringify(key)} is unused`);
+});
+
 for (const [name, table] of [["strings.json", MAC.strings], ["extra.json", EXTRA.strings]]) {
   test(`${name}: every string in every language, with the key's placeholders`, () => {
     for (const [key, entry] of Object.entries(table)) {
-      for (const lang of OTHERS) {
+      for (const lang of MAC_LANGS) {
         const value = entry[lang];
         assert.ok(value !== undefined, `${name}: ${JSON.stringify(key)} has no ${lang}`);
         const forms = typeof value === "string" ? [value] : Object.values(value);
@@ -263,7 +281,7 @@ const NOT_TEXT = new Set([
 test("no known user-facing English literal outside t() in the views and settings", () => {
   const translated = new Set(
     [...Object.entries(MAC.strings), ...Object.entries(EXTRA.strings)]
-      .filter(([key, entry]) => OTHERS.some((l) => typeof entry[l] !== "string" || entry[l] !== key))
+      .filter(([key, entry]) => MAC_LANGS.some((l) => typeof entry[l] !== "string" || entry[l] !== key))
       .map(([key]) => key),
   );
   const offenders = [];

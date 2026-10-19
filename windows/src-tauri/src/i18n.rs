@@ -12,10 +12,12 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 
-pub const LANGUAGES: [&str; 10] = ["en", "zh-Hans", "hi", "es", "ar", "fr", "bn", "pt-BR", "ru", "id"];
+/// German ("de") is local to this build: src/i18n/de.json, merged in per entry.
+pub const LANGUAGES: [&str; 11] = ["en", "zh-Hans", "hi", "es", "ar", "fr", "bn", "pt-BR", "ru", "id", "de"];
 
 static MAC: &str = include_str!("../../src/i18n/strings.json");
 static EXTRA: &str = include_str!("../../src/i18n/extra.json");
+static DE: &str = include_str!("../../src/i18n/de.json");
 
 type Table = HashMap<String, Map<String, Value>>;
 
@@ -30,6 +32,16 @@ fn table() -> &'static Table {
             for (key, entry) in strings {
                 if let Value::Object(langs) = entry {
                     out.insert(key.clone(), langs.clone());
+                }
+            }
+        }
+        // German goes into each entry next to the other languages, not over it.
+        if let Ok(Value::Object(root)) = serde_json::from_str::<Value>(DE) {
+            if let Some(Value::Object(strings)) = root.get("strings") {
+                for (key, entry) in strings {
+                    if let Value::Object(langs) = entry {
+                        out.entry(key.clone()).or_default().extend(langs.clone());
+                    }
                 }
             }
         }
@@ -244,7 +256,8 @@ mod tests {
         assert_eq!(resolve("", &sys(&["pt-PT"])), "pt-BR");
         assert_eq!(resolve("", &sys(&["zh-CN"])), "zh-Hans");
         assert_eq!(resolve("", &sys(&["zh-TW", "de", "es-MX"])), "es");
-        assert_eq!(resolve("", &sys(&["de-DE"])), "en");
+        assert_eq!(resolve("", &sys(&["de-DE"])), "de");
+        assert_eq!(resolve("", &sys(&["nl-NL"])), "en");
         assert_eq!(resolve("xx", &[]), "en");
     }
 
@@ -281,7 +294,9 @@ mod tests {
     fn every_extra_string_has_every_language() {
         let Value::Object(root) = serde_json::from_str::<Value>(EXTRA).unwrap() else { panic!() };
         let Some(Value::Object(strings)) = root.get("strings") else { panic!("no strings") };
-        for (key, entry) in strings {
+        for (key, _) in strings {
+            // German comes from de.json, merged into the same table.
+            let entry = table().get(key).expect("in the table");
             for lang in LANGUAGES.iter().filter(|l| **l != "en") {
                 assert!(entry.get(*lang).is_some(), "{key:?} has no {lang}");
             }
