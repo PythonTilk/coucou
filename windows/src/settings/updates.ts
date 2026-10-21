@@ -112,7 +112,7 @@ export function updatesSection(
     notes.style.display = notes.textContent ? "" : "none";
 
     clear(buttons);
-    const check = h("button", { text: "Check now" }) as HTMLButtonElement;
+    const check = h("button", { text: t("Check now") }) as HTMLButtonElement;
     check.disabled = busy || !!status?.installing;
     check.addEventListener("click", () => void look());
     buttons.append(h("label", { text: status ? `Version ${status.current}` : "Version" }), check);
@@ -159,7 +159,7 @@ export function updatesSection(
   const section = h(
     "section",
     {},
-    h("h2", {}, dot, h("span", { text: "Updates" })),
+    h("h2", {}, dot, h("span", { text: t("Updates") })),
     h("div", {
       class: "hint",
       text: "This build comes from your own fork. Its builds are kept in a private repository of yours; Coucou asks it for the newest one and installs it when you say so. Windows asks for administrator rights at each install.",

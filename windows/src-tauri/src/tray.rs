@@ -1,4 +1,6 @@
 // Notification-area icon: Open, Weekly recap, Wardrobe, Settings, Pause, Quit.
+// "Check for updates…" / "Install update X…" comes from this build's own
+// updater (updates.rs); upstream's update.rs is not built here.
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;

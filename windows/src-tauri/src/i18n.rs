@@ -12,12 +12,10 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 
-/// German ("de") is local to this build: src/i18n/de.json, merged in per entry.
-pub const LANGUAGES: [&str; 11] = ["en", "zh-Hans", "hi", "es", "ar", "fr", "bn", "pt-BR", "ru", "id", "de"];
+pub const LANGUAGES: [&str; 12] = ["en", "zh-Hans", "hi", "es", "ar", "fr", "bn", "pt-BR", "ru", "id", "de", "tr"];
 
 static MAC: &str = include_str!("../../src/i18n/strings.json");
 static EXTRA: &str = include_str!("../../src/i18n/extra.json");
-static DE: &str = include_str!("../../src/i18n/de.json");
 
 type Table = HashMap<String, Map<String, Value>>;
 
@@ -32,16 +30,6 @@ fn table() -> &'static Table {
             for (key, entry) in strings {
                 if let Value::Object(langs) = entry {
                     out.insert(key.clone(), langs.clone());
-                }
-            }
-        }
-        // German goes into each entry next to the other languages, not over it.
-        if let Ok(Value::Object(root)) = serde_json::from_str::<Value>(DE) {
-            if let Some(Value::Object(strings)) = root.get("strings") {
-                for (key, entry) in strings {
-                    if let Value::Object(langs) = entry {
-                        out.entry(key.clone()).or_default().extend(langs.clone());
-                    }
                 }
             }
         }
@@ -255,9 +243,8 @@ mod tests {
         assert_eq!(resolve("", &sys(&["fr_FR.UTF-8"])), "fr");
         assert_eq!(resolve("", &sys(&["pt-PT"])), "pt-BR");
         assert_eq!(resolve("", &sys(&["zh-CN"])), "zh-Hans");
-        assert_eq!(resolve("", &sys(&["zh-TW", "nl", "es-MX"])), "es");
-        assert_eq!(resolve("", &sys(&["de-DE"])), "de");
-        assert_eq!(resolve("", &sys(&["nl-NL"])), "en");
+        assert_eq!(resolve("", &sys(&["zh-TW", "it", "es-MX"])), "es");
+        assert_eq!(resolve("", &sys(&["it-IT"])), "en");
         assert_eq!(resolve("xx", &[]), "en");
     }
 
@@ -294,12 +281,56 @@ mod tests {
     fn every_extra_string_has_every_language() {
         let Value::Object(root) = serde_json::from_str::<Value>(EXTRA).unwrap() else { panic!() };
         let Some(Value::Object(strings)) = root.get("strings") else { panic!("no strings") };
-        for (key, _) in strings {
-            // German comes from de.json, merged into the same table.
-            let entry = table().get(key).expect("in the table");
+        for (key, entry) in strings {
             for lang in LANGUAGES.iter().filter(|l| **l != "en") {
                 assert!(entry.get(*lang).is_some(), "{key:?} has no {lang}");
             }
         }
+    }
+
+    #[test]
+    fn german_resolves_translates_and_selects_singular_only_for_one() {
+        for tag in ["de", "de-DE", "de-AT", "de-CH", "de_DE.UTF-8"] {
+            assert_eq!(resolve("", &[tag.to_string()]), "de");
+        }
+        assert_eq!(resolve("de", &["fr-FR".to_string()]), "de");
+        assert_eq!(resolve("fr", &["de-DE".to_string()]), "fr");
+        set_for_test("de");
+        assert_eq!(t("Allow"), "Zulassen");
+        assert_eq!(t("Deny"), "Ablehnen");
+        assert_eq!(t("Open the chat"), "Chat öffnen");
+        assert_eq!(tf("Uploading {name}", &[("name", "Grüße.pdf")]), "Grüße.pdf wird hochgeladen");
+        assert_eq!(t("A string nobody translated"), "A string nobody translated");
+        for count in [0, 1, 2, 21] {
+            assert_eq!(plural_category("de", count), if count == 1 { "one" } else { "other" });
+            let repo = if count == 1 { "Repository" } else { "Repositorys" };
+            let model = if count == 1 { "Modell" } else { "Modelle" };
+            assert_eq!(tn("{count} repo", "{count} repos", count, &[]), format!("{count} {repo}"));
+            assert_eq!(tn("✓ Connected · {count} model", "✓ Connected · {count} models", count, &[]),
+                format!("✓ Verbunden · {count} {model}"));
+        }
+        set_for_test("en");
+    }
+
+    #[test]
+    fn turkish_resolves_translates_and_preserves_counted_nouns() {
+        let system = |tag: &str| vec![tag.to_string()];
+        assert_eq!(resolve("tr", &system("en-US")), "tr");
+        for tag in ["tr", "tr-TR", "tr_TR.UTF-8"] {
+            assert_eq!(resolve("", &system(tag)), "tr");
+        }
+        set_for_test("tr");
+        assert_eq!(t("Allow"), "İzin ver");
+        assert_eq!(t("Deny"), "Reddet");
+        assert_eq!(t("Open the chat"), "Sohbeti aç");
+        assert_eq!(tf("Uploading {name}", &[("name", "öğrenci.pdf")]), "öğrenci.pdf yükleniyor");
+        assert_eq!(t("A string nobody translated"), "A string nobody translated");
+        for n in [0, 1, 2, 21] {
+            assert_eq!(plural_category("tr", n), if n == 1 { "one" } else { "other" });
+            assert_eq!(tn("{count} repo", "{count} repos", n, &[]), format!("{n} depo"));
+            assert_eq!(tn("✓ Connected · {count} model", "✓ Connected · {count} models", n, &[]),
+                format!("✓ Bağlı · {n} model"));
+        }
+        set_for_test("en");
     }
 }
