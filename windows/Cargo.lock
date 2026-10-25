@@ -742,7 +742,7 @@ dependencies = [
 
 [[package]]
 name = "coucou"
-version = "0.5.1"
+version = "0.5.3"
 dependencies = [
  "arboard",
  "chrono",
@@ -753,6 +753,7 @@ dependencies = [
  "keyring",
  "libc",
  "mdns-sd",
+ "miniz_oxide 0.8.9",
  "qrcode",
  "rcgen",
  "reqwest 0.12.28",
@@ -780,7 +781,7 @@ dependencies = [
 
 [[package]]
 name = "coucou-hook"
-version = "0.5.1"
+version = "0.5.3"
 dependencies = [
  "libc",
  "serde_json",

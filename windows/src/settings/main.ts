@@ -28,6 +28,8 @@ import { agentsSection } from "./agents";
 import { updatesSection } from "./updates";
 import { alertsSection } from "./alerts";
 import { phoneSection } from "./phone";
+import { whatsappSection } from "./whatsapp";
+import { WHATSAPP_ID } from "../core/whatsapp";
 import { colorDot } from "./colors";
 import { renderDiff, statusDot } from "./parts";
 import {
@@ -1026,6 +1028,27 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
   return h("section", {}, h("h2", {}, h("span", { text: t("Integrations") })), note, list);
 }
 
+/** WhatsApp (experimental), under the other integrations: its pill is turned on from its own switch. */
+function whatsappSections(): HTMLElement[] {
+  if (!availablePills().some((p) => p.id === WHATSAPP_ID)) return [];
+  return [whatsappSection({
+    toggle,
+    maxPills: MAX_ACTIVE,
+    pillActive: () => settings.activeIntegrations.includes(WHATSAPP_ID),
+    setPill: (on) => {
+      const has = settings.activeIntegrations.includes(WHATSAPP_ID);
+      if (on && !has && settings.activeIntegrations.length < MAX_ACTIVE) {
+        settings.activeIntegrations = [...settings.activeIntegrations, WHATSAPP_ID];
+      } else if (!on && has) {
+        settings.activeIntegrations = settings.activeIntegrations.filter((x) => x !== WHATSAPP_ID);
+      } else {
+        return;
+      }
+      declaredChanged();
+    },
+  })];
+}
+
 // ── General section ───────────────────────────────────────────────────────────
 
 function generalSection(): HTMLElement {
@@ -1515,7 +1538,7 @@ async function render() {
     // The provider and model picker first, as in this build (it covers Claude Code too).
     chat: () => [chatSection(hasClaudeCode), apiSection(hasKey), chatProvidersSection(chatKeys, keyChanged), localSection(customKey)],
     // Phone alerts are this build's own (settings/alerts.ts).
-    integrations: () => [integrationsSection(present), alertsSection()],
+    integrations: () => [integrationsSection(present), ...whatsappSections(), alertsSection()],
     phone: () => [phoneSection(settings.phoneLink ?? false, toggle, settings)],
     shortcuts: () => [shortcutsSection(shortcutReport)],
   };
