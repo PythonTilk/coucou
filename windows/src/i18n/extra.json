@@ -6888,6 +6888,21 @@
    "tr": "Sağlayıcı veya model değiştir",
    "ko": "제공업체나 모델 바꾸기",
    "ja": "プロバイダまたはモデルを切り替え"
+  },
+  "{tool} cannot be kept off the web, so it gets no mail. Ask Claude, Codex, Gemini or Copilot, or start a new chat.": {
+   "zh-Hans": "{tool} 无法禁止联网，因此不会收到邮件。请改问 Claude、Codex、Gemini 或 Copilot，或开始新的对话。",
+   "hi": "{tool} को वेब से दूर नहीं रखा जा सकता, इसलिए उसे मेल नहीं मिलती। Claude, Codex, Gemini या Copilot से पूछें, या नई चैट शुरू करें।",
+   "es": "{tool} no se puede mantener sin acceso a la web, así que no recibe correo. Pregunta a Claude, Codex, Gemini o Copilot, o empieza un chat nuevo.",
+   "ar": "لا يمكن إبقاء {tool} بعيدًا عن الويب، لذا لا يتلقى البريد. اسأل Claude أو Codex أو Gemini أو Copilot، أو ابدأ دردشة جديدة.",
+   "fr": "{tool} ne peut pas être privé du web, il ne reçoit donc pas les mails. Demande à Claude, Codex, Gemini ou Copilot, ou commence une nouvelle conversation.",
+   "bn": "{tool}-কে ওয়েব থেকে দূরে রাখা যায় না, তাই এটি মেল পায় না। Claude, Codex, Gemini বা Copilot-কে জিজ্ঞাসা করুন, অথবা নতুন চ্যাট শুরু করুন।",
+   "pt-BR": "{tool} não pode ficar sem acesso à web, então não recebe e-mails. Pergunte ao Claude, Codex, Gemini ou Copilot, ou comece um novo chat.",
+   "ru": "{tool} нельзя отключить от интернета, поэтому он не получает почту. Спросите Claude, Codex, Gemini или Copilot либо начните новый чат.",
+   "id": "{tool} tidak bisa dijauhkan dari web, jadi tidak menerima email. Tanyakan ke Claude, Codex, Gemini, atau Copilot, atau mulai obrolan baru.",
+   "de": "{tool} lässt sich nicht vom Web fernhalten und bekommt deshalb keine Mails. Frag Claude, Codex, Gemini oder Copilot oder starte einen neuen Chat.",
+   "tr": "{tool} webden uzak tutulamaz, bu yüzden e-posta almaz. Claude, Codex, Gemini veya Copilot'a sor ya da yeni bir sohbet başlat.",
+   "ja": "{tool} はウェブを無効にできないため、メールは渡されません。Claude、Codex、Gemini、Copilot に聞くか、新しいチャットを始めてください。",
+   "ko": "{tool}은(는) 웹 접근을 끌 수 없어 메일을 받지 않습니다. Claude, Codex, Gemini 또는 Copilot에게 묻거나 새 채팅을 시작하세요."
   }
  }
 }

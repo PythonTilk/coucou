@@ -496,6 +496,14 @@ pub async fn send(
     let reads_file = turn.first && matches!(context, Some(ChatContext::File { .. }));
     // Local to this build: no web either once mail is in the conversation (chat.rs).
     let web = !reads_file && chat.web_allowed();
+    // Cursor and Antigravity have no switch here that turns their web off: a
+    // conversation holding mail is not sent to them at all.
+    if !chat.web_allowed() && matches!(cli, Cli::Cursor | Cli::Antigravity) {
+        return Err(tf(
+            "{tool} cannot be kept off the web, so it gets no mail. Ask Claude, Codex, Gemini or Copilot, or start a new chat.",
+            &[("tool", cli.name())],
+        ));
+    }
     let system = chat::system_prompt(web);
     let text = if cli == Cli::Claude {
         // Reading a dropped file, Claude Code reads it itself and gets no web at all.

@@ -83,11 +83,6 @@ impl Chat {
         *c = Conversation { epoch, ..Default::default() };
     }
 
-    /// Mail is about to go into this conversation (lib.rs chat_send).
-    pub fn mark_mail(&self) {
-        self.inner.lock().unwrap().saw_mail = true;
-    }
-
     /// Whether this turn may use the web: never once mail is in the conversation.
     pub fn web_allowed(&self) -> bool {
         !self.inner.lock().unwrap().saw_mail && !crate::mail::MAIL_TURN.load(std::sync::atomic::Ordering::Relaxed)
@@ -97,6 +92,11 @@ impl Chat {
     /// provider answered the previous turns.
     pub fn begin(&self, provider: &str) -> Turn {
         let mut c = self.inner.lock().unwrap();
+        // A mail turn marks the conversation it actually lands in, under the
+        // same lock: a "New chat" while the mail was being read cannot clear it.
+        if crate::mail::MAIL_TURN.load(std::sync::atomic::Ordering::Relaxed) {
+            c.saw_mail = true;
+        }
         if c.owner.as_deref() != Some(provider) {
             c.native = c.plain.clone();
             c.owner = Some(provider.to_string());
@@ -420,7 +420,7 @@ mod tests {
     fn a_conversation_with_mail_in_it_gets_no_web_until_new_chat() {
         let chat = Chat::default();
         assert!(chat.web_allowed());
-        chat.mark_mail();
+        chat.inner.lock().unwrap().saw_mail = true;
         assert!(!chat.web_allowed());
         chat.reset();
         assert!(chat.web_allowed());
