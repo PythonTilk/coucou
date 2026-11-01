@@ -119,6 +119,8 @@ export interface Settings {
   autoCloseInterval: number;
   /** Hovering the island opens it all the way (off: hovering only peeks). */
   openOnHover: boolean;
+  /** Open the island for a moment when any pill finishes or hits an error. */
+  alertsFromAllPills: boolean;
   /** Date and time in the middle of the compact island. */
   showClock: boolean;
   absenceInterval: number;
@@ -134,6 +136,8 @@ export interface Settings {
   model: string;
   /** Show the Claude plan pill (5 h and weekly limits) in the island's header. */
   showPlanInNotch: boolean;
+  /** Show the Claude plan percentage in the compact island next to the agent dots. */
+  showPlanInCompactIsland: boolean;
   /** Coucou's status line relay is installed in Claude Code's settings. */
   planRelayInstalled: boolean;
   /** Show the Codex plan pill in the island's header. */
@@ -142,6 +146,8 @@ export interface Settings {
   chatProvider: ProviderId;
   /** The model picked for each provider other than Anthropic, by provider id. */
   chatModels: Record<string, string>;
+  /** Settings → Chat → Your AI subscriptions: each provider's switch (cli_relay.rs). */
+  chatSubscriptions: Record<string, boolean>;
   /** Model server addresses once connected; empty means not connected. */
   ollamaUrl: string;
   lmstudioUrl: string;
@@ -198,6 +204,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundVolume: 0.12,
   autoCloseInterval: 15,
   openOnHover: false,
+  alertsFromAllPills: false,
   showClock: false,
   absenceInterval: 180,
   activeIntegrations: [
@@ -209,10 +216,12 @@ export const DEFAULT_SETTINGS: Settings = {
   hooksInstalled: false,
   model: "claude-opus-5",
   showPlanInNotch: false,
+  showPlanInCompactIsland: false,
   planRelayInstalled: false,
   showCodexPlanInNotch: false,
   chatProvider: "anthropic",
   chatModels: {},
+  chatSubscriptions: {},
   ollamaUrl: "",
   lmstudioUrl: "",
   customUrl: "",
@@ -376,6 +385,16 @@ class AppState {
     this.isPinned = false;
     this.updateTask(req.pillId, "working");
     this.setPillBadge(req.pillId, null);
+
+    // If another request is waiting in line, promote it next
+    const next = this.approvalQueue.shift();
+    if (next) {
+      this.beginApproval(next);
+      this.updateTask(next.pillId, next.questions ? "question" : "approval");
+      this.notify();
+      return;
+    }
+
     const previous = this.focusBeforeApproval;
     this.focusBeforeApproval = null;
     if (previous && this.focusId === req.pillId && this.tasks.some((t) => t.id === previous)) {

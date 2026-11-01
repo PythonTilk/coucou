@@ -38,6 +38,7 @@ beforeEach(() => {
 });
 
 const $ = (cls) => view.el.querySelector(cls);
+const chips = () => view.el.find(".picker-chip").map((c) => c.textContent);
 const models = () => view.el.find(".picker-model").map((m) => m.textContent);
 
 test("the model button shows the active provider's model", () => {
@@ -52,18 +53,30 @@ test("the model button shows the active provider's model", () => {
 
 test("a provider without a key is never asked for its models", async () => {
   answers.secret_present = false;
+  answers.claude_ready = false;
   $(".model-btn").fire("click");
   await flush();
   assert.ok($(".chat-body").classList.contains("picking"));
-  // The provider is picked in Settings → Chat: the island only lists models.
-  assert.equal(view.el.find(".picker-chip").length, 0);
-  assert.deepEqual(sent("secret_present"), [{ key: "anthropic-api-key" }]);
+  assert.deepEqual(chips(), ["Anthropic", "Google", "OpenAI", "OpenRouter"]);
+  assert.equal(sent("claude_ready").length, 1);
   assert.deepEqual(sent("chat_models"), []);
   assert.match($(".picker-status").textContent, /No API key/);
 });
 
+test("without a key, Claude Code standing in still lists Claude's models", async () => {
+  answers.secret_present = false;
+  answers.claude_ready = true;
+  answers.chat_models = [{ id: "claude-opus-5", label: "Claude Opus 5" }];
+  $(".model-btn").fire("click");
+  await flush();
+  assert.deepEqual(sent("secret_present"), []);
+  assert.deepEqual(sent("chat_models"), [{ provider: "anthropic" }]);
+  assert.deepEqual(models(), ["Claude Opus 5"]);
+});
+
 test("with a key, the models are listed and picking one saves it", async () => {
   answers.secret_present = true;
+  answers.claude_ready = true;
   answers.chat_models = [
     { id: "claude-opus-5", label: "Claude Opus 5" },
     { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
@@ -79,13 +92,15 @@ test("with a key, the models are listed and picking one saves it", async () => {
   assert.equal($(".model-name").textContent, "claude-sonnet-5");
 });
 
-test("the picker lists the provider picked in Settings, keeping a sensible model", async () => {
+test("switching provider saves it and asks the new provider only", async () => {
   answers.secret_present = (args) => args.key === "google-api-key";
   answers.chat_models = (args) => (args.provider === "google" ? [{ id: "gemini-2.5-flash", label: "gemini-2.5-flash" }] : []);
-  State.settings = { ...State.settings, chatProvider: "google" };
-  view.sync();
   $(".model-btn").fire("click");
   await flush();
+  assert.deepEqual(sent("chat_models"), []);
+  view.el.find(".picker-chip")[1].fire("click");
+  await flush();
+  assert.equal(State.settings.chatProvider, "google");
   assert.deepEqual(sent("chat_models"), [{ provider: "google" }]);
   // The saved model was not offered: the flash one is kept instead, and saved.
   assert.equal(State.settings.chatModels.google, "gemini-2.5-flash");
@@ -144,4 +159,35 @@ test("a local answer streams into one reply, then the finished text replaces it"
   assert.equal(view.el.find(".reply")[0].textContent, "Hello there!");
   assert.deepEqual(State.chatHistory.map((m) => m.role), ["user", "assistant"]);
   assert.ok(!$(".model-btn").disabled);
+});
+
+test("once the answer is in, the field takes the focus back, enabled", async () => {
+  let finish;
+  answers.chat_send = () => new Promise((resolve) => (finish = resolve));
+  const input = $(".chat-input");
+  const focused = [];
+  input.focus = () => focused.push(input.disabled ? "disabled" : "enabled");
+  input.value = "hello";
+  $(".send-btn").fire("click");
+  await flush();
+  view.sync(); // mid-answer: the field is disabled
+  assert.ok(input.disabled);
+
+  finish({ text: "Hi!" });
+  await flush(); // no sync yet: in the island it runs on the next frame
+  assert.equal(input.disabled, false);
+  assert.deepEqual(focused, ["enabled"]);
+});
+
+test("a failed answer leaves the chat for the note without taking the focus", async () => {
+  answers.chat_send = () => Promise.reject(new Error("no key"));
+  const input = $(".chat-input");
+  const focused = [];
+  input.focus = () => focused.push(true);
+  input.value = "hello";
+  $(".send-btn").fire("click");
+  await flush();
+  await flush();
+  assert.equal(State.view, "note");
+  assert.deepEqual(focused, []);
 });

@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use tauri::AppHandle;
 
 use crate::settings::Settings;
-use crate::{claude, claude_cli, local_chat, openai_compat, secrets};
+use crate::{claude, cli_relay, local_chat, openai_compat, secrets};
 
 pub const ANTHROPIC: &str = "anthropic";
 
@@ -48,9 +48,6 @@ pub struct ModelInfo {
 #[derive(Default)]
 pub struct Chat {
     inner: Mutex<Conversation>,
-    /// Claude Code keeps its own history (claude_cli.rs): the session to resume,
-    /// for which conversation, and how many plain turns that session has seen.
-    cli: Mutex<Option<(u64, String, usize)>>,
 }
 
 #[derive(Default)]
@@ -97,22 +94,6 @@ impl Chat {
         }
     }
 
-    /// The Claude Code session that already holds everything before this turn,
-    /// if there is one. None after "New chat", or when another provider answered
-    /// in between — the session then knows less than the conversation.
-    pub(crate) fn cli_session(&self, turn: &Turn) -> Option<String> {
-        let cli = self.cli.lock().unwrap();
-        match cli.as_ref() {
-            Some((epoch, id, seen)) if *epoch == turn.epoch && *seen == turn.history.len() => Some(id.clone()),
-            _ => None,
-        }
-    }
-
-    /// Remembers the session that answered `turn`, now two turns longer.
-    pub(crate) fn set_cli_session(&self, turn: &Turn, id: String) {
-        *self.cli.lock().unwrap() = Some((turn.epoch, id, turn.history.len() + 2));
-    }
-
     /// Records a finished turn: the user message and the answer in the
     /// provider's format, and their plain text. Only a successful turn is
     /// recorded, so the history always matches what the model saw.
@@ -134,7 +115,12 @@ impl Chat {
 /// has one worth using (identity.rs), and only claims web search where the
 /// provider runs it (Claude).
 pub fn system_prompt(web_search: bool) -> String {
-    system_prompt_for(crate::identity::first_name(), web_search)
+    let base = system_prompt_for(crate::identity::first_name(), web_search);
+    // The chat's Mail switch is on for this turn: how to write a mail plan.
+    if crate::mail::MAIL_TURN.load(std::sync::atomic::Ordering::Relaxed) {
+        return base + crate::mail::plan::INSTRUCTIONS;
+    }
+    base
 }
 
 fn system_prompt_for(first_name: Option<&str>, web_search: bool) -> String {
@@ -187,7 +173,6 @@ pub fn model_for(settings: &Settings, provider: &str) -> String {
         .get(provider)
         .map(|m| m.trim().to_string())
         .filter(|m| !m.is_empty())
-        .or_else(|| (provider == claude_cli::PROVIDER).then(|| claude_cli::DEFAULT_MODEL.to_string()))
         .or_else(|| openai_compat::provider(provider).map(|p| p.default_model.to_string()))
         .unwrap_or_default()
 }
@@ -227,11 +212,11 @@ pub async fn send(
     let context = context.map(checked_context).transpose()?;
     let provider = settings.chat_provider.as_str();
     let model = model_for(settings, provider);
+    if cli_relay::uses_subscription(settings, provider) {
+        return cli_relay::send(chat, provider, &model, query, context).await;
+    }
     if provider == ANTHROPIC || provider.is_empty() {
         return claude::send(chat, &model, query, context).await;
-    }
-    if provider == claude_cli::PROVIDER {
-        return claude_cli::send(chat, &model, query, context).await;
     }
     if let Some(p) = openai_compat::provider(provider) {
         return openai_compat::send(chat, p, &model, query, context).await;
@@ -253,6 +238,9 @@ pub async fn send_for_phone(
     query: String,
     on_delta: impl FnMut(String),
 ) -> Result<ChatReply, String> {
+    if cli_relay::uses_subscription(settings, provider) {
+        return cli_relay::send(chat, provider, model, query, None).await;
+    }
     if provider == ANTHROPIC {
         return claude::send(chat, model, query, None).await;
     }
@@ -270,12 +258,11 @@ pub async fn send_for_phone(
 /// address): nothing is sent anywhere before that.
 pub async fn models(settings: &Settings, provider: &str) -> Result<Vec<ModelInfo>, String> {
     let no_key = || crate::i18n::t("No API key — add it in Settings.");
-    if provider == ANTHROPIC {
-        let key = secrets::get(claude::KEY).ok_or_else(no_key)?;
-        return claude::models(&key).await;
+    if cli_relay::uses_subscription(settings, provider) {
+        return Ok(cli_relay::models(provider));
     }
-    if provider == claude_cli::PROVIDER {
-        return Ok(claude_cli::models());
+    if provider == ANTHROPIC {
+        return claude::available_models().await;
     }
     if let Some(p) = openai_compat::provider(provider) {
         let key = secrets::get(p.key).ok_or_else(no_key)?;

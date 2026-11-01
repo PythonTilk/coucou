@@ -6,7 +6,8 @@ mod alerts;
 mod calendar;
 mod chat;
 mod claude;
-mod claude_cli;
+mod claude_code;
+mod cli_relay;
 mod codex_plan;
 mod config_file;
 mod desktop;
@@ -20,8 +21,8 @@ mod identity;
 mod integrations;
 mod island;
 mod local_chat;
-mod mail;
 mod log;
+mod mail;
 mod net;
 mod notes;
 mod openai_compat;
@@ -98,7 +99,7 @@ fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
 
 #[tauri::command]
 fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
-    let (screen_changed, autostart_changed, shortcuts_changed) = {
+    let (settings, screen_changed, autostart_changed, shortcuts_changed) = {
         let mut current = shared.settings.lock().unwrap();
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
@@ -119,9 +120,8 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
         settings.phone_relay_url = current.phone_relay_url.clone();
         settings.phone_chat_models = current.phone_chat_models.clone();
         *current = settings;
-        (screen_changed, autostart_changed, shortcuts_changed)
+        (current.clone(), screen_changed, autostart_changed, shortcuts_changed)
     };
-    let settings = shared.settings.lock().unwrap().clone();
     if let Err(err) = settings::save(&settings) {
         log::line(format!("could not save settings: {err}"));
     }
@@ -345,8 +345,8 @@ fn open_session(session_id: Option<String>, path: Option<String>) -> bool {
     }
 }
 
-/// The Claude Desktop pill's target: the Claude app (Windows only — it has no
-/// Linux build).
+/// The Claude Desktop pill's target: the Claude app (Windows, and Linux with
+/// Anthropic's .deb).
 #[tauri::command]
 fn open_claude_desktop() -> bool {
     platform::open_claude_desktop()
@@ -480,6 +480,7 @@ fn status_line_apply(
         // As on the Mac: taking the relay out turns the pill off with it.
         if !install {
             current.show_plan_in_notch = false;
+            current.show_plan_in_compact_island = false;
         }
         if let Err(err) = settings::save(&current) {
             log::line(format!("could not save settings: {err}"));
@@ -542,8 +543,18 @@ async fn chat_send(
     chat: State<'_, Chat>,
     query: String,
     context: Option<ChatContext>,
+    mail: Option<bool>,
 ) -> Result<ChatReply, String> {
     let settings = shared.settings.lock().unwrap().clone();
+    // The chat's Mail switch: the latest Outlook messages ride under the request, and the
+    // system prompt says how to write a plan (mail/plan.rs) that runs only after a click.
+    if mail == Some(true) {
+        let query = mail::decorate(&query).await;
+        mail::MAIL_TURN.store(true, std::sync::atomic::Ordering::Relaxed);
+        let reply = chat::send(&app, &chat, &settings, query, context).await;
+        mail::MAIL_TURN.store(false, std::sync::atomic::Ordering::Relaxed);
+        return reply;
+    }
     chat::send(&app, &chat, &settings, query, context).await
 }
 
@@ -553,6 +564,12 @@ async fn chat_send(
 async fn chat_models(shared: State<'_, Shared>, provider: String) -> Result<Vec<ModelInfo>, String> {
     let settings = shared.settings.lock().unwrap().clone();
     chat::models(&settings, &provider).await
+}
+
+/// The Claude API settings use their own key even when chat uses a CLI plan.
+#[tauri::command]
+async fn claude_api_models() -> Result<Vec<ModelInfo>, String> {
+    claude::available_models().await
 }
 
 /// Settings → Local models → Connect: does the server answer, and with which models?
@@ -582,7 +599,7 @@ fn ingest_file(path: String) -> Result<DroppedFile, String> {
 /// Whether the Claude Code chat provider has a `claude` to run (Settings shows it).
 #[tauri::command]
 fn claude_cli_present() -> bool {
-    claude_cli::find_claude().is_some()
+    claude_code::available()
 }
 
 // ── Shelf ─────────────────────────────────────────────────────────────────────
@@ -636,34 +653,41 @@ fn secret_present(key: String) -> bool {
     secrets::present(&key)
 }
 
-/// The server the Mail pill logs in to, as stored with its password: what
-/// Settings shows, so the user sees where the password goes. None without one.
+/// Whether Claude can answer: an API key, or else the user's own Claude Code.
 #[tauri::command]
-fn mail_server() -> Option<String> {
-    secrets::get(mail::PASSWORD_KEY).and_then(|stored| mail::bound(&stored)).map(|(host, _)| host)
+fn claude_ready() -> bool {
+    claude::ready()
+}
+
+/// Settings → Chat → Your AI subscriptions: each provider's switch and
+/// whether its terminal tool is installed (looked up again on every call).
+#[tauri::command]
+fn subscription_status(shared: State<Shared>) -> Vec<cli_relay::Status> {
+    let settings = shared.settings.lock().unwrap().clone();
+    cli_relay::status(&settings)
+}
+
+/// A switch under "Your AI subscriptions" moved: saved, and both windows told.
+#[tauri::command]
+fn subscription_set(app: AppHandle, shared: State<Shared>, provider: String, on: bool) -> Vec<cli_relay::Status> {
+    let settings = {
+        let mut current = shared.settings.lock().unwrap();
+        cli_relay::set(&mut current, &provider, on);
+        current.clone()
+    };
+    if let Err(err) = settings::save(&settings) {
+        log::line(format!("could not save settings: {err}"));
+    }
+    let status = cli_relay::status(&settings);
+    let _ = app.emit("settings-changed", settings);
+    status
 }
 
 #[tauri::command]
 fn secret_set(app: AppHandle, key: String, value: String) -> Result<(), String> {
-    // The mail password is stored with the server it is entered for, in the
-    // same entry: the server cannot be changed under it afterwards.
-    if key == mail::PASSWORD_KEY {
-        if value.is_empty() {
-            return secrets::clear(mail::PASSWORD_KEY);
-        }
-        let host = secrets::get(mail::HOST_KEY).unwrap_or_default();
-        return secrets::set(mail::PASSWORD_KEY, &mail::bind(&host, &value)?);
-    }
     // Bound to its server's address: only local_set_key may store it.
     if key == local_chat::CUSTOM_KEY {
         return Err("use local_set_key".into());
-    }
-    // The mail password belongs to the server it was entered for: a change of
-    // server forgets it, so it cannot be sent anywhere it was not meant for.
-    if key == mail::HOST_KEY
-        && mail::host_change_forgets_password(secrets::get(mail::HOST_KEY).as_deref(), Some(&value))
-    {
-        secrets::clear(mail::PASSWORD_KEY)?;
     }
     let before = (key == "github-token").then(|| secrets::get(&key));
     secrets::set(&key, &value)?;
@@ -683,9 +707,6 @@ fn secret_set(app: AppHandle, key: String, value: String) -> Result<(), String> 
 
 #[tauri::command]
 fn secret_clear(app: AppHandle, key: String) -> Result<(), String> {
-    if key == mail::HOST_KEY && mail::host_change_forgets_password(secrets::get(mail::HOST_KEY).as_deref(), None) {
-        secrets::clear(mail::PASSWORD_KEY)?;
-    }
     let had = key == "github-token" && secrets::present(&key);
     secrets::clear(&key)?;
     if key == claude::KEY {
@@ -835,7 +856,18 @@ pub fn show_settings_window(app: &AppHandle) {
 /// "settings", "general", "shortcuts"…).
 pub fn show_hub(app: &AppHandle, page: Option<&str>) {
     let Some(win) = app.get_webview_window(HUB_LABEL) else {
-        log::line("Coucou window missing");
+        // Creating it at startup can fail on some machines (WebView2
+        // 0x80070578, #775): try again now, on the main thread, where
+        // window creation can't deadlock a command.
+        log::line("Coucou window missing, creating it again");
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            create_settings_window(&handle);
+            if let Some(win) = handle.get_webview_window(HUB_LABEL) {
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+        });
         return;
     };
     if let Some(page) = page {
@@ -931,6 +963,20 @@ pub fn run() {
         .manage(recap::load())
         .invoke_handler(tauri::generate_handler![
             boot,
+            mail::mail_refresh,
+            mail::mail_more,
+            mail::mail_search,
+            mail::mail_detail,
+            mail::mail_open,
+            mail::mail_act,
+            mail::mail_triage,
+            mail::mail_triage_set,
+            mail::mail_journal_clear,
+            mail::mail_undo,
+            mail::mail_plan_show,
+            mail::mail_plan_test,
+            mail::mail_plan_start,
+            mail::mail_plan_cancel,
             save_settings,
             set_system_languages,
             set_collapsed,
@@ -966,6 +1012,7 @@ pub fn run() {
             log_line,
             chat_send,
             chat_models,
+            claude_api_models,
             local_connect,
             local_set_key,
             chat_reset,
@@ -978,13 +1025,15 @@ pub fn run() {
             shelf_drag_icon,
             clipboard_file,
             claude_cli_present,
-            mail_server,
             update_status,
             phone_alert,
             phone_alert_test,
             update_check,
             update_install,
             secret_present,
+            claude_ready,
+            subscription_status,
+            subscription_set,
             secret_set,
             secret_clear,
             refresh_integration,
@@ -1137,6 +1186,7 @@ pub fn run() {
             pipe::start(handle.clone());
             phone_link::start_if_enabled(&handle);
             integrations::start(handle.clone());
+            mail::start(handle.clone());
             spotify::sync(&handle, &loaded.active_integrations);
             // WhatsApp (experimental): nothing runs unless it is turned on and its pill is active.
             whatsapp::start(&handle, &loaded.active_integrations);

@@ -57,7 +57,7 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 /// this build) Claude Code signed in to a subscription.
 pub fn requirements_met() -> bool {
     speech::is_ready()
-        && (crate::secrets::present(crate::claude::KEY) || crate::claude_cli::find_claude().is_some())
+        && crate::claude::ready()
 }
 
 /// Starts or stops listening to follow the preference.
@@ -510,7 +510,9 @@ fn find_app(wanted: &str) -> Option<(String, Box<dyn FnOnce()>)> {
     }
     let (_, label, id) = best?;
     Some((label, Box::new(move || {
-        let _ = std::process::Command::new("gtk-launch").arg(&id).spawn();
+        let mut cmd = std::process::Command::new("gtk-launch");
+        cmd.arg(&id);
+        let _ = crate::platform::no_console(&mut cmd).spawn();
     })))
 }
 

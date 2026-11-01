@@ -4,13 +4,8 @@
 // island's settings are drawn here, one Notch page at a time.
 
 import "./settings.css";
-import {
-  Bridge, onEvent, type HookPreview, type HookStatus, type ModelInfo, type ShortcutsReport,
-} from "../core/bridge";
-import {
-  CUSTOM_SERVER_KEY, activeModel, pickModel, providerDef, urlExposure, visibleProviders, withModel,
-  type ProviderDef,
-} from "../core/providers";
+import { Bridge, onEvent, type HookPreview, type HookStatus, type ShortcutsReport, type SubscriptionStatus } from "../core/bridge";
+import { CUSTOM_SERVER_KEY, providerDef, urlExposure } from "../core/providers";
 import {
   ISLAND_SHORTCUTS, SHORTCUTS, SHORTCUT_TEXT, activeKeys, displayKeys, duplicates, effective,
   recordPress, type Binding,
@@ -24,6 +19,7 @@ import {
 import { h, clear } from "../views/dom";
 import { startHub, type PageId } from "../hub/shell";
 import { FLOW_PAGE_RENDERERS } from "../hub/pages";
+import { claudeModelControl } from "./claude-models";
 import { agentsSection } from "./agents";
 import { updatesSection } from "./updates";
 import { alertsSection } from "./alerts";
@@ -256,6 +252,7 @@ const PLAN_SETTINGS_TEXT = {
   get claude() { return t("Shows your Claude plan usage (5-hour and weekly limits) in the island's header. Coucou adds a status line relay in ~/.claude/settings.json. If you already have a status line, it keeps working as before. Pro and Max plans only."); },
   get claudeCli() { return t("The numbers come from the Claude Code command-line tool. The Claude desktop app does not report them, so the gauge stays empty if you only use the desktop app."); },
   get showClaude() { return t("Show in notch"); },
+  get showClaudeCompact() { return t("Show in compact island"); },
   get codex() { return t("Shows your Codex plan usage (weekly limit and free resets left) in the island's header. Coucou asks the Codex CLI (codex app-server) when the pill shows; nothing is installed. Codex must be signed in with ChatGPT."); },
   get showCodex() { return t("Show Codex plan in the notch"); },
 };
@@ -273,7 +270,10 @@ function planSection(status: HookStatus): HTMLElement {
     if (fresh) Object.assign(status, fresh);
     settings.planRelayInstalled = status.planRelayInstalled;
     // Cancelled or failed: a switch that was waiting for the install falls back.
-    if (!status.planRelayInstalled) settings.showPlanInNotch = false;
+    if (!status.planRelayInstalled) {
+      settings.showPlanInNotch = false;
+      settings.showPlanInCompactIsland = false;
+    }
     redraw();
   };
 
@@ -295,6 +295,21 @@ function planSection(status: HookStatus): HTMLElement {
         });
       }
     });
+    const swCompact = toggle(settings.showPlanInCompactIsland, (on) => {
+      if (!on) {
+        settings.showPlanInCompactIsland = false;
+        void save();
+      } else if (status.planRelayInstalled) {
+        settings.showPlanInCompactIsland = true;
+        void save();
+      } else {
+        void reviewChange(body, STATUS_LINE_CHANGE, true, () => void rebuild(), () => {
+          settings.planRelayInstalled = true;
+          settings.showPlanInCompactIsland = true;
+          void save().then(rebuild);
+        });
+      }
+    });
     body.append(
       h("div", {
         class: "hint",
@@ -302,6 +317,7 @@ function planSection(status: HookStatus): HTMLElement {
       }),
       h("div", { class: "hint", text: PLAN_SETTINGS_TEXT.claudeCli }),
       h("div", { class: "row" }, h("label", { text: PLAN_SETTINGS_TEXT.showClaude }), sw),
+      h("div", { class: "row" }, h("label", { text: PLAN_SETTINGS_TEXT.showClaudeCompact }), swCompact),
       h("div", { class: "row" },
         h("label", { text: t("Relay") }),
         statusDot(status.planRelayInstalled),
@@ -334,11 +350,81 @@ function planSection(status: HookStatus): HTMLElement {
   return section;
 }
 
+// ── Your AI subscriptions ─────────────────────────────────────────────────────
+
+/** The plan people know, by provider. */
+const SUBSCRIPTION_NAMES: Record<string, string> = {
+  anthropic: "Claude", google: "Google Gemini", openai: "ChatGPT", cursor: "Cursor", copilot: "GitHub Copilot",
+};
+
+/**
+ * One switch per provider (cli_relay.rs): on, the chat goes through its
+ * official terminal tool, signed in with the user's own account; off, through
+ * its API key. Says whether the tool is installed and how to sign in.
+ */
+function subscriptionsSection(): HTMLElement {
+  const list = h("div", { style: "display:flex;flex-direction:column;gap:12px" });
+  const draw = (rows: SubscriptionStatus[]) => {
+    clear(list);
+    for (const row of rows) {
+      const p = providerDef(row.provider);
+      const sw = toggle(row.on, (on) => {
+        void Bridge.subscriptionSet(row.provider, on).then((next) => {
+          if (next) draw(next);
+        });
+      });
+      const lines: HTMLElement[] = [];
+      if (row.installed) {
+        lines.push(h("div", { class: "hint", style: "color:#22c55e", text: t("{tool} found ✓", { tool: row.tool }) }));
+        lines.push(h("div", {
+          class: "hint",
+          text: t("Not signed in yet? Run this once in a terminal: {command}", { command: row.signIn }),
+        }));
+      } else {
+        lines.push(h("div", { class: "row" },
+          h("span", { class: "hint", text: t("{tool} not found.", { tool: row.tool }) }),
+          h("button", { text: t("Install it"), onclick: () => void Bridge.openUrl(row.installUrl) }),
+        ));
+      }
+      if (!row.subscriptionOnly && !row.on) {
+        lines.push(h("div", { class: "hint", text: t("Off: the chat uses your API key below.") }));
+      }
+      list.append(h("div", {},
+        h("div", { class: "row" },
+          h("i", { class: "dot", style: `background:${p.accent}` }),
+          h("label", { text: SUBSCRIPTION_NAMES[row.provider] ?? p.name }),
+          sw,
+        ),
+        ...lines,
+      ));
+    }
+  };
+  void Bridge.subscriptionStatus().then((rows) => draw(rows ?? []));
+  return h(
+    "section",
+    {},
+    h("h2", { text: t("Your AI subscriptions") }),
+    h("div", {
+      class: "hint",
+      text: t("Chat on the plan you already pay for. Coucou asks your AI's official terminal tool, signed in with your own account: it never sees your password or your key."),
+    }),
+    list,
+  );
+}
+
 // ── Claude API section ────────────────────────────────────────────────────────
 
-function apiSection(hasKey: boolean): HTMLElement {
-  const dot = statusDot(hasKey);
-  const state = h("span", { class: "hint", text: hasKey ? t("Key saved in the {store}.", { store: KEY_STORE }) : t("No key yet — the chat needs one.") });
+/** The state line under Claude: the key, else Claude Code (switched on above), else what is missing. */
+function apiState(hasKey: boolean, relay: boolean): string {
+  if (hasKey) return t("Key saved in the {store}.", { store: KEY_STORE });
+  return relay
+    ? t("No key: the chat can go through your Claude subscription above.")
+    : t("No key yet — the chat needs one.");
+}
+
+function apiSection(hasKey: boolean, relay: boolean): HTMLElement {
+  const dot = statusDot(hasKey || relay);
+  const state = h("span", { class: "hint", text: apiState(hasKey, relay) });
 
   const field = h("input", {
     type: "password",
@@ -354,12 +440,12 @@ function apiSection(hasKey: boolean): HTMLElement {
 
   async function refresh() {
     const present = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
-    dot.style.background = present ? "#22c55e" : "#f4505e";
-    state.textContent = present
-      ? t("Key saved in the {store}.", { store: KEY_STORE })
-      : t("No key yet — the chat needs one.");
+    const ready = (await Bridge.claudeReady()) ?? false;
+    dot.style.background = ready ? "#22c55e" : "#f4505e";
+    state.textContent = apiState(present, ready && !present);
     field.placeholder = present ? `••••••••••••  ${t("(stored)")}` : "sk-ant-...";
     clearBtn.style.display = present ? "" : "none";
+    void model.reload(present);
   }
 
   saveBtn.addEventListener("click", async () => {
@@ -387,6 +473,12 @@ function apiSection(hasKey: boolean): HTMLElement {
     }
   });
 
+  const model = claudeModelControl(() => settings.model, async (value) => {
+    await Bridge.saveSettings({ ...settings, model: value });
+    settings.model = value;
+  });
+  void model.reload(hasKey);
+
   clearBtn.style.display = hasKey ? "" : "none";
 
   return h(
@@ -395,135 +487,8 @@ function apiSection(hasKey: boolean): HTMLElement {
     h("h2", {}, dot, h("span", { text: "Claude" })),
     state,
     h("div", { class: "row" }, h("label", { text: t("API key") }), field, saveBtn, clearBtn),
+    model.element,
     feedback,
-  );
-}
-
-// ── Chat section (local to this build) ────────────────────────────────────────
-
-const CLAUDE_CODE = "claudecode";
-
-const PICK_STRINGS = {
-  get hint() { return t("Where the chat goes and which model answers. The model name above the chat box only switches between this provider's models."); },
-  get provider() { return t("Provider"); },
-  get loading() { return t("Loading models…"); },
-  get noKey() { return t("No key yet — add it below."); },
-};
-
-/**
- * Where the chat goes, and with which model — the provider chips and model list
- * of the chat's picker (views/chat.ts), moved here. The island keeps only the
- * model list, for the provider picked here.
- */
-function chatSection(hasClaudeCode: boolean): HTMLElement {
-  const dot = h("i", { class: "dot" });
-  const chips = h("div", { class: "provider-chips" });
-  const model = h("select", { class: "model-select" }) as HTMLSelectElement;
-  const status = h("div", { class: "hint" });
-
-  /** Models already asked for, by provider; a model server is asked again each time. */
-  const cache = new Map<string, ModelInfo[]>();
-  let request = 0;
-  let shown = "";
-  let listed: ModelInfo[] = [];
-
-  function fill(p: ProviderDef, models: ModelInfo[]) {
-    listed = models;
-    clear(model);
-    const current = activeModel(settings);
-    for (const m of models) model.append(h("option", { value: m.id, text: m.label }));
-    // A model set by hand, or picked from a list that has moved on, stays selectable.
-    if (current && !models.some((m) => m.id === current)) {
-      model.append(h("option", { value: current, text: current }));
-    }
-    model.value = current;
-    model.disabled = models.length === 0 && !current;
-    status.textContent = "";
-    if (p.id === CLAUDE_CODE) {
-      status.textContent = hasClaudeCode
-        ? "On the account Claude Code is signed in to: no API key, it counts against your Claude plan. The newest models may need an up-to-date Claude Code (`claude update`)."
-        : "Claude Code was not found. Install it and run `claude` once to sign in, then reopen Settings.";
-    }
-  }
-
-  async function load() {
-    const p = providerDef(settings.chatProvider);
-    const ticket = ++request;
-    const cached = p.urlField ? undefined : cache.get(p.id);
-    if (cached) {
-      fill(p, cached);
-      return;
-    }
-    clear(model);
-    model.disabled = true;
-    // Nothing is asked of a provider that has no key yet.
-    if (p.key && !(await Bridge.secretPresent(p.key))) {
-      if (ticket === request) status.textContent = PICK_STRINGS.noKey;
-      return;
-    }
-    if (ticket !== request) return;
-    status.textContent = PICK_STRINGS.loading;
-    try {
-      const models = await Bridge.chatModels(p.id);
-      if (ticket !== request) return;
-      if (!p.urlField) cache.set(p.id, models);
-      const keep = pickModel(p, models.map((m) => m.id), activeModel(settings));
-      if (keep && keep !== activeModel(settings)) {
-        settings = withModel(settings, p.id, keep);
-        void save();
-      }
-      fill(p, models);
-    } catch (err) {
-      if (ticket === request) status.textContent = String(err).replace(/^Error:\s*/, "");
-    }
-  }
-
-  function draw() {
-    const active = providerDef(settings.chatProvider);
-    dot.style.background = active.accent;
-    clear(chips);
-    for (const p of visibleProviders(settings)) {
-      const on = p.id === active.id;
-      const chip = h(
-        "button",
-        { class: on ? "provider-chip on" : "provider-chip", style: `--accent:${p.accent}` },
-        h("i", { class: "provider-dot" }),
-        h("span", { text: t(p.name) }),
-      );
-      chip.addEventListener("click", () => {
-        if (p.id === settings.chatProvider) return;
-        settings.chatProvider = p.id;
-        void save();
-        draw();
-      });
-      chips.append(chip);
-    }
-    // The list is asked for again only when the provider changed (or a model
-    // server, whose list moves); a model picked in the island just shows.
-    if (shown !== active.id) {
-      shown = active.id;
-      void load();
-    } else if (model.options.length > 0 && model.value !== activeModel(settings)) {
-      fill(active, listed);
-    }
-  }
-
-  model.addEventListener("change", () => {
-    settings = withModel(settings, providerDef(settings.chatProvider).id, model.value);
-    void save();
-  });
-
-  draw();
-  declaredViews.push(draw);
-
-  return h(
-    "section",
-    {},
-    h("h2", {}, dot, h("span", { text: t("Chat") })),
-    h("div", { class: "hint", text: PICK_STRINGS.hint }),
-    h("div", { class: "row" }, h("label", { text: PICK_STRINGS.provider }), chips),
-    h("div", { class: "row" }, h("label", { text: t("Model") }), model),
-    status,
   );
 }
 
@@ -613,12 +578,12 @@ function activePillsSection(connected: Record<string, boolean>): HTMLElement {
 
 const CHAT_STRINGS = {
   get providersTitle() { return t("Chat providers"); },
-  get providersHint() { return t("Chat with Google AI, OpenAI or OpenRouter instead of Claude: add a key here, then pick it under Chat above. Keys stay in the system keychain. These providers get no web search and no tools: they can answer, never act on this computer."); },
+  get providersHint() { return t("Chat with Google AI, OpenAI or OpenRouter instead of Claude: add a key here, then click the model name above the chat box to switch provider and model. Keys stay in the system keychain. These providers get no web search and no tools: they can answer, never act on this computer."); },
   get stored() { return `••••••••  ${t("(stored)")}`; },
   get save() { return t("Save"); },
   get remove() { return t("Remove"); },
   get localTitle() { return t("Local models"); },
-  get localHint() { return t("Chat with a model you run yourself: Ollama or LM Studio (leave the address empty for the usual one on this computer), or any server that speaks the OpenAI API, such as vLLM or llama.cpp. Once connected, pick it under Chat above."); },
+  get localHint() { return t("Chat with a model you run yourself: Ollama or LM Studio (leave the address empty for the usual one on this computer), or any server that speaks the OpenAI API, such as vLLM or llama.cpp. Once connected, pick it above the chat box."); },
   get connect() { return t("Connect"); },
   get connecting() { return t("Connecting…"); },
   get disconnect() { return t("Disconnect"); },
@@ -903,14 +868,6 @@ const INTEGRATIONS: IntegrationDef[] = [
     fields: [{ key: "notion-api-key", label: N_("Integration token"), placeholder: "ntn_…", secret: true }] },
   { id: "integration_calcom", name: "Cal.com", color: "#C9956A",
     fields: [{ key: "calcom-api-key", label: N_("API key"), placeholder: "cal_…", secret: true }] },
-  { id: "integration_mail", name: "Mail", color: "#EA4335",
-    fields: [
-      // The server comes before the password on purpose: changing the server
-      // forgets the password, which belongs to the server it was entered for.
-      { key: "mail-host", label: "Server", placeholder: "imap.gmail.com (leave empty for Gmail)", secret: false },
-      { key: "mail-address", label: "Address", placeholder: "you@gmail.com", secret: false },
-      { key: "mail-password", label: "App password", placeholder: "16 letters; asked again if the server changes", secret: true },
-    ] },
   { id: "integration_calendar", name: "Calendar", color: "#38BDF8",
     fields: [{
       key: "calendar-ics-url", label: "iCal subscription",
@@ -988,21 +945,6 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
     }
 
     if (def.hint) rows.append(h("div", { class: "hint", text: t(def.hint) }));
-    if (def.id === "integration_mail") {
-      // Where the stored password goes, said plainly: it is kept with this server.
-      const server = h("div", { class: "hint" });
-      rows.append(server);
-      const say = () =>
-        void Bridge.mailServer().then((host) => {
-          server.textContent = host
-            ? `The app password is kept for ${host}. Changing the server asks for it again.`
-            : "No app password stored yet.";
-        });
-      say();
-      rows.addEventListener("click", (e) => {
-        if ((e.target as HTMLElement).tagName === "BUTTON") window.setTimeout(say, 300);
-      });
-    }
     if (def.id === "integration_spotify") {
       // As on the Mac's row: said only when there is no Spotify to launch.
       const hint = h("div", { class: "hint", style: "padding-top:5px" });
@@ -1128,6 +1070,11 @@ function generalSection(): HTMLElement {
       toggle(settings.openOnHover, (v) => { settings.openOnHover = v; void save(); }),
     ),
     h("div", { class: "hint", text: t("Hovering the island opens it; it folds again shortly after the pointer leaves. Click inside to keep it open.") }),
+    h("div", { class: "row" },
+      h("label", { text: t("Open for every pill’s alerts") }),
+      toggle(settings.alertsFromAllPills, (v) => { settings.alertsFromAllPills = v; void save(); }),
+    ),
+    h("div", { class: "hint", text: t("When a pill other than the one shown finishes or hits an error, the notch shows it for a moment, then the pill you had comes back.") }),
     h("div", { class: "row" },
       h("label", { text: t("Show clock in the island") }),
       toggle(settings.showClock, (v) => { settings.showClock = v; void save(); }),
@@ -1494,6 +1441,7 @@ async function render() {
   const agents = await Bridge.agentHooksList();
 
   const hasKey = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
+  const claudeRelay = !hasKey && ((await Bridge.claudeReady()) ?? false);
   const shortcutReport = await Bridge.shortcutsStatus();
 
   const keys = [
@@ -1508,7 +1456,7 @@ async function render() {
   const connected: Record<string, boolean> = { ...((await Bridge.agentHooksStatus()) ?? {}) };
   for (const def of availablePills()) {
     if (def.connect.kind === "key") {
-      connected[def.id] = present[def.connect.key] ?? (await Bridge.secretPresent(def.connect.key)) ?? false;
+      connected[def.id] = present[def.connect.key] ?? (await Bridge.keyReady(def.connect.key)) ?? false;
     }
   }
   /** A chat provider's key was saved or removed: its pill's row says so at once. */
@@ -1524,7 +1472,6 @@ async function render() {
     chatKeys[key] = (await Bridge.secretPresent(key)) ?? false;
   }
   const customKey = (await Bridge.secretPresent(CUSTOM_SERVER_KEY)) ?? false;
-  const hasClaudeCode = (await Bridge.claudeCliPresent()) ?? false;
 
   declaredViews.length = 0;
   localRedraw = null;
@@ -1535,8 +1482,7 @@ async function render() {
     general: () => [generalSection(), updatesSection(settings, toggle, () => void save())],
     pills: () => [activePillsSection(connected)],
     agents: () => [claudeSection(status), agentsSection(agents), planSection(status)],
-    // The provider and model picker first, as in this build (it covers Claude Code too).
-    chat: () => [chatSection(hasClaudeCode), apiSection(hasKey), chatProvidersSection(chatKeys, keyChanged), localSection(customKey)],
+    chat: () => [subscriptionsSection(), apiSection(hasKey, claudeRelay), chatProvidersSection(chatKeys, keyChanged), localSection(customKey)],
     // Phone alerts are this build's own (settings/alerts.ts).
     integrations: () => [integrationsSection(present), ...whatsappSections(), alertsSection()],
     phone: () => [phoneSection(settings.phoneLink ?? false, toggle, settings)],

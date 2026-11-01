@@ -29,7 +29,7 @@ export const PILL_CATEGORIES: { id: PillCategory; title: string }[] = [
  * - `soon`: can be declared, shows "Coming soon" (macOS has it, this build not yet);
  * - `no`: macOS only, never offered here.
  */
-export type PillSupport = "yes" | "windows" | "soon" | "no";
+export type PillSupport = "yes" | "windows" | "linux" | "soon" | "no";
 
 /** What makes the pill connected. */
 export type PillConnect =
@@ -96,10 +96,10 @@ export const PILL_CATALOG: readonly PillDefinition[] = [
   { id: "agent_hermes", name: "Hermes", color: "#C084FC", category: "agent",
     subtitle: N_("Agent"), source: "agent", support: "yes", connect: hooks },
   // Claude Code sessions run from the Claude desktop app: the relay tags them
-  // from CLAUDE_CODE_ENTRYPOINT, so there is nothing to install. The app has no
-  // Linux build.
+  // from CLAUDE_CODE_ENTRYPOINT, so there is nothing to install. The app has
+  // official builds for Windows and Linux (.deb).
   { id: "agent_claude-desktop", name: "Claude Desktop", color: "#D97757", category: "agent",
-    subtitle: N_("Agent"), source: "agent", support: "windows", connect: none },
+    subtitle: N_("Agent"), source: "agent", support: "yes", connect: none },
   // ── AI for the chat ────────────────────────────────────────────────────────
   { id: "ai_anthropic", name: "Anthropic", color: ACCENT.anthropic, category: "ai",
     subtitle: N_("Chat"), source: "n8n", support: "yes", connect: key("anthropic-api-key") },
@@ -133,9 +133,6 @@ export const PILL_CATALOG: readonly PillDefinition[] = [
   // Local to this build: what is coming up, from iCal subscription links.
   { id: "integration_calendar", name: "Calendar", color: "#38BDF8", category: "service",
     subtitle: N_("Integration"), source: "n8n", support: "yes", connect: key("calendar-ics-url") },
-  // Local to this build: the inbox's newest messages, read over IMAP.
-  { id: "integration_mail", name: "Mail", color: "#EA4335", category: "service",
-    subtitle: N_("Integration"), source: "n8n", support: "yes", connect: key("mail-password") },
   { id: "integration_stripe", name: "Stripe", color: "#0570DE", category: "service",
     subtitle: N_("Integration"), source: "n8n", support: "yes", connect: key("stripe-api-key") },
   { id: "integration_music", name: "Apple Music", color: "#FA2D48", category: "service",
@@ -144,6 +141,10 @@ export const PILL_CATALOG: readonly PillDefinition[] = [
   // (src-tauri/src/spotify.rs).
   { id: "integration_spotify", name: "Spotify", color: "#1DB954", category: "service",
     subtitle: N_("Integration"), source: "n8n", support: "yes", connect: none },
+  // Mail: classic Outlook on Windows, driven on this computer through its COM objects
+  // (src-tauri/src/mail). The new Outlook has none, and Linux has no Outlook.
+  { id: "integration_mail", name: "Mail", color: "#2F8CFF", category: "service",
+    subtitle: N_("Integration"), source: "n8n", support: "windows", connect: none },
   // WhatsApp (experimental) through a gateway on this computer (src-tauri/src/whatsapp): set up,
   // linked and turned on in Settings → Integrations → WhatsApp, off until then.
   { id: "integration_whatsapp", name: "WhatsApp", color: "#25D366", category: "service",

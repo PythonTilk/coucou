@@ -25,10 +25,6 @@ pub const KNOWN_KEYS: &[&str] = &[
     "notion-api-key",
     "calcom-api-key",
     "calendar-ics-url",
-    // The Mail pill (mail.rs): the address, an app password, and the server when it is not Gmail's.
-    "mail-address",
-    "mail-password",
-    "mail-host",
     // Phone alerts (alerts.rs): the ntfy topic's address; whoever knows it can read it.
     "ntfy-topic-url",
     // Read-only access to the private repository this build updates from (updates.rs).

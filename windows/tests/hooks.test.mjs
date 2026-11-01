@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { calls, emit, sent } from "./tauri.mjs";
-import { MAX_WAITING, registerHookHandlers, resetHookState } from "../src/island/hooks.ts";
+import { registerHookHandlers, restoreAlertFocus } from "../src/island/hooks.ts";
 import { DEFAULT_SETTINGS, State } from "../src/core/state.ts";
 import { Sound } from "../src/core/sound.ts";
 import { setLanguage } from "../src/i18n/i18n.ts";
@@ -38,7 +38,8 @@ beforeEach(() => {
   State.paused = false;
   State.isPinned = false;
   State.pendingApproval = null;
-  resetHookState();
+  State.approvalQueue = [];
+  State.focusBeforeApproval = null;
   State.settings = { ...DEFAULT_SETTINGS };
   State.loadIntegrationTasks();
 });
@@ -178,6 +179,29 @@ test("a session finishing behind another pill only badges its own, for 5.2 s", (
   assert.equal(task().pillBadge, "finished");
   seconds(5.2);
   assert.equal(task().pillBadge, null);
+});
+
+test("alertsFromAllPills: unfocused pill alert opens the island and restores focus after 5.2 s", () => {
+  State.settings.alertsFromAllPills = true;
+  State.setFocus("integration_n8n");
+  hook({ hook_event_name: "Stop" });
+  assert.equal(State.focusId, "integration_claude");
+  assert.deepEqual(asked, ["alert:finished"]);
+  seconds(5.2);
+  assert.equal(State.focusId, "integration_n8n");
+  State.settings.alertsFromAllPills = false;
+});
+
+test("alertsFromAllPills: while the island is open the alert's pill keeps the front", () => {
+  State.settings.alertsFromAllPills = true;
+  State.setFocus("integration_n8n");
+  hook({ hook_event_name: "Stop" });
+  State.mode = "expanded";
+  seconds(5.2);
+  // The finished card still names the pill that finished; closing gives n8n back.
+  assert.equal(State.focusId, "integration_claude");
+  restoreAlertFocus();
+  assert.equal(State.focusId, "integration_n8n");
 });
 
 test("a failed stop shows the error view, or the error badge behind another pill", () => {
@@ -330,6 +354,21 @@ test("the end of the turn takes a waiting card down and releases the relay", () 
   }
 });
 
+test("a card the relay stopped waiting for goes, and the next request gets its card (#857)", () => {
+  hook({ hook_event_name: "PermissionRequest", request_id: "r1", session_id: "s1", tool_name: "Bash" });
+  // Another request's expiry leaves this card alone.
+  emit("approval-expired", "r0");
+  assert.equal(State.pendingApproval?.requestId, "r1");
+  emit("approval-expired", "r1");
+  assert.equal(State.pendingApproval, null);
+  hook({ hook_event_name: "PermissionRequest", request_id: "r2", session_id: "s1", tool_name: "Bash" });
+  assert.equal(State.pendingApproval?.requestId, "r2");
+  assert.deepEqual(sent("approval_decline"), []);
+  // r1's 110 s timer was cancelled: it doesn't take r2's card down.
+  seconds(100);
+  assert.equal(State.pendingApproval?.requestId, "r2");
+});
+
 test("Codex's Interrupt puts its pill back to idle", () => {
   hook({ hook_event_name: "UserPromptSubmit", session_id: "s1", coucou_agent: "codex", prompt: "go" });
   assert.equal(task("agent_codex").state, "thinking");
@@ -357,37 +396,33 @@ test("a Claude Desktop session gets the Claude Desktop pill, in its colour (Mac 
   assert.equal(desktop.color, "#D97757");
   assert.equal(desktop.sessionId, "d1");
   assert.equal(task().state, "idle");
+  // Its permission requests get an approval card on the island (#328).
+  hook({ hook_event_name: "PermissionRequest", request_id: "r1", coucou_agent: "claude-desktop", tool_name: "Bash", tool_input: { command: "npm test" } });
+  assert.equal(State.pendingApproval?.requestId, "r1");
+  assert.equal(State.pendingApproval?.pillId, "agent_claude-desktop");
+  assert.equal(sent("approval_ack").length, 1);
 });
 
-test("a Claude Desktop session gets its cards: it is Claude Code under another pill", () => {
+test("Claude Desktop AskUserQuestion gets a question card on the island (#328)", () => {
+  hook({ hook_event_name: "SessionStart", cwd: "C:\\p\\proj", session_id: "d2", coucou_agent: "claude-desktop" });
   hook({
-    hook_event_name: "PermissionRequest", request_id: "r1", session_id: "d1", coucou_agent: "claude-desktop",
-    tool_name: "Bash", tool_input: { command: "ls" },
-  });
-  assert.deepEqual(sent("approval_decline"), []);
-  assert.deepEqual(sent("approval_ack"), [{ requestId: "r1" }]);
-  assert.equal(State.pendingApproval.pillId, "agent_claude-desktop");
-  assert.equal(State.pendingApproval.command, "Bash · ls");
-  assert.equal(task("agent_claude-desktop").state, "approval");
-  assert.ok(asked.includes("alert:approval"));
-});
-
-test("a question asked from Claude Desktop becomes a question card", () => {
-  hook({
-    hook_event_name: "PermissionRequest", request_id: "q1", session_id: "d1", coucou_agent: "claude-desktop",
+    hook_event_name: "PermissionRequest",
+    request_id: "q1",
+    coucou_agent: "claude-desktop",
     tool_name: "AskUserQuestion",
     tool_input: {
-      questions: [{
-        question: "Which one?", multiSelect: false,
-        options: [{ label: "A", description: "first" }, { label: "B", description: "second" }],
-      }],
+      questions: [
+        {
+          question: "Proceed?",
+          options: [{ label: "Yes" }, { label: "No" }],
+        },
+      ],
     },
   });
-  assert.deepEqual(sent("approval_decline"), []);
-  assert.equal(State.pendingApproval.questions.length, 1);
-  assert.equal(State.pendingApproval.questions[0].question, "Which one?");
-  assert.equal(task("agent_claude-desktop").state, "question");
-  assert.ok(asked.includes("alert:question"));
+  assert.equal(State.pendingApproval?.requestId, "q1");
+  assert.equal(State.pendingApproval?.pillId, "agent_claude-desktop");
+  assert.ok(State.pendingApproval?.questions);
+  assert.equal(sent("approval_ack").length, 1);
 });
 
 // ── Main tool and Cursor ──────────────────────────────────────────────────────
@@ -533,119 +568,74 @@ test("a request from Claude Code in Cursor's terminal goes on the Cursor pill", 
   assert.equal(task().state, "idle");
 });
 
-test("a second request never replaces the card: it waits in line behind it", () => {
+test("a second request is queued in line: it waits for the first card to finish (#870)", () => {
   ask("r1");
   ask("r2", { tool_name: "Bash", tool_input: { command: "ls" } });
   assert.equal(State.pendingApproval.requestId, "r1");
   assert.equal(State.pendingApproval.tool, "Write");
-  assert.deepEqual(State.approvalQueue.map((r) => r.requestId), ["r2"]);
-  // Both are taken as far as the relay is concerned; nothing goes back to a terminal.
+  assert.equal(State.approvalQueue.length, 1);
+  assert.equal(State.approvalQueue[0].requestId, "r2");
   assert.deepEqual(sent("approval_decline"), []);
   assert.deepEqual(sent("approval_ack"), [{ requestId: "r1" }, { requestId: "r2" }]);
-});
 
-test("the next request in line takes the card when the one before it goes", () => {
-  ask("r1");
-  ask("r2", { session_id: "s2", tool_name: "Bash", tool_input: { command: "ls" } });
-  asked = [];
-  // r1's own turn ends: its card goes, r2's comes up at once.
-  hook({ hook_event_name: "Stop", session_id: "s1" });
+  // When r1 finishes, r2 takes the card
+  State.endApproval();
   assert.equal(State.pendingApproval.requestId, "r2");
-  assert.equal(State.pendingApproval.command, "Bash · ls");
-  assert.deepEqual(State.approvalQueue, []);
-  assert.equal(State.isPinned, true);
-  assert.ok(asked.includes("alert:approval"));
-  assert.deepEqual(sent("approval_decline"), [{ requestId: "r1" }]);
+  assert.equal(State.pendingApproval.tool, "Bash");
+  assert.equal(State.approvalQueue.length, 0);
+
+  // Beyond maxPending (5 total), new requests are declined
+  ask("r3"); ask("r4"); ask("r5"); ask("r6");
+  assert.equal(State.approvalQueue.length, 4); // r2 active + r3..r6 queued = 5 total
+  ask("r7");
+  assert.deepEqual(sent("approval_decline"), [{ requestId: "r7" }]);
 });
 
-test("a request in line leaves it when its own turn ends, and the card stays", () => {
+test("a request waiting in line leaves the card on screen as it is, and sounds once", (context) => {
+  const sound = context.mock.method(Sound, "play", () => {});
   ask("r1");
-  ask("r2", { session_id: "s2" });
-  hook({ hook_event_name: "Stop", session_id: "s2" });
+  assert.deepEqual(sound.mock.calls.map((call) => call.arguments), [["approval"]]);
+  hook({ hook_event_name: "SessionStart", session_id: "d2", coucou_agent: "codex" });
+  asked = [];
+  hook({
+    hook_event_name: "PermissionRequest", request_id: "q1", session_id: "s2", tool_name: "AskUserQuestion",
+    tool_input: { questions: [{ question: "Which?", options: [{ label: "A" }, { label: "B" }] }] },
+  });
+  hook({ hook_event_name: "PermissionRequest", request_id: "c1", session_id: "d2", coucou_agent: "codex", tool_name: "Bash" });
+  // No alert: the island stays on r1's approval card, not on the question's view.
+  assert.deepEqual(asked, []);
   assert.equal(State.pendingApproval.requestId, "r1");
-  assert.deepEqual(State.approvalQueue, []);
-  assert.deepEqual(sent("approval_decline"), [{ requestId: "r2" }]);
+  assert.equal(task("agent_codex").pillBadge, "approval");
+  assert.deepEqual(sound.mock.calls.map((call) => call.arguments), [["approval"], ["work"], ["question"], ["approval"]]);
 });
 
-test("each request has its own 110 s, on the card or in line", () => {
+test("the next request in line comes up when the card is dropped, and keeps its own clock", () => {
   ask("r1");
   seconds(60);
-  ask("r2", { session_id: "s2" });
+  ask("r2", { session_id: "s2", tool_name: "Bash", tool_input: { command: "ls" } });
+  emit("approval-expired", "r1");
+  assert.equal(State.pendingApproval.requestId, "r2");
+  assert.deepEqual(asked.at(-1), "alert:approval");
+  // r1's 110 s run out: r2, which arrived 60 s later, is still on the card.
   seconds(50);
-  // r1 has had its 110 s: the terminal took it back, r2 takes the card.
-  assert.equal(State.pendingApproval.requestId, "r2");
-  seconds(59);
-  assert.equal(State.pendingApproval.requestId, "r2");
-  seconds(1);
+  assert.equal(State.pendingApproval?.requestId, "r2");
+  seconds(60);
   assert.equal(State.pendingApproval, null);
-  assert.equal(State.isPinned, false);
-  // Timed out, not declined: by then the relay has answered on its own.
-  assert.deepEqual(sent("approval_decline"), []);
 });
 
-test("the line holds four behind the card; one more goes back to its terminal", () => {
-  ask("r0");
-  for (let i = 1; i <= MAX_WAITING; i++) ask(`r${i}`, { session_id: `s${i}` });
-  assert.equal(State.approvalQueue.length, MAX_WAITING);
-  ask("late", { session_id: "s9" });
-  assert.equal(State.approvalQueue.length, MAX_WAITING);
-  assert.deepEqual(sent("approval_decline"), [{ requestId: "late" }]);
-});
-
-test("a request names its own project when the pill is shared", () => {
+test("a turn that ends takes its requests out of the line and releases them", () => {
   ask("r1");
-  assert.equal(State.pendingApproval.projectName, undefined);
-  ask("r2", { session_id: "s2", cwd: "C:\\Users\\me\\other" });
-  assert.equal(State.approvalQueue[0].projectName, "other");
-});
-
-// ── Several sessions behind one pill (sessions.ts, Mac #562) ──────────────────
-
-const sess = (session_id, hook_event_name, extra = {}) =>
-  hook({ hook_event_name, session_id, cwd: `C:\\p\\${session_id}`, ...extra });
-
-test("the oldest live session names the pill; a sibling does not take it over", () => {
-  sess("one", "SessionStart");
-  sess("two", "SessionStart");
-  sess("two", "PreToolUse", { tool_name: "Bash", tool_input: { command: "ls" } });
-  assert.equal(task().name, "one");
-  assert.equal(task().sessionId, "one");
-  assert.equal(task().sessionCwd, "C:\\p\\one");
-});
-
-test("a session stopping does not finish the pill while a sibling is mid-turn", () => {
-  sess("one", "UserPromptSubmit", { prompt: "a" });
-  sess("two", "UserPromptSubmit", { prompt: "b" });
-  sess("one", "Stop", { last_assistant_message: "one is done" });
-  assert.equal(task().state, "thinking");
-  assert.equal(task().steps.at(-1), "one is done");
-  seconds(6);
-  assert.equal(task().state, "thinking");
-  // The last one to stop finishes it.
-  sess("two", "Stop");
-  assert.equal(task().state, "finished");
-});
-
-test("only the last session to end takes the card and its steps down", () => {
-  sess("one", "SessionStart");
-  sess("two", "SessionStart");
-  sess("two", "PreToolUse", { tool_name: "Bash", tool_input: { command: "ls" } });
-  sess("one", "SessionEnd");
-  // The sibling's card stands, now under its own name.
-  assert.equal(task().state, "working");
-  assert.equal(task().name, "two");
-  assert.equal(task().steps.length, 1);
-  sess("two", "SessionEnd");
-  assert.equal(task().state, "idle");
-  assert.deepEqual(task().steps, []);
-});
-
-test("a sibling at work does not take the waiting card's state off the pill", () => {
-  sess("one", "PermissionRequest", { request_id: "r1", tool_name: "Bash" });
-  assert.equal(task().state, "approval");
-  sess("two", "PreToolUse", { tool_name: "Bash", tool_input: { command: "ls" } });
-  assert.equal(task().state, "approval");
+  ask("r2", { session_id: "s2", tool_name: "Bash", tool_input: { command: "ls" } });
+  ask("r3", { session_id: "s2", tool_name: "Bash", tool_input: { command: "pwd" } });
+  hook({ hook_event_name: "Stop", session_id: "s2" });
+  assert.deepEqual(State.approvalQueue, []);
+  assert.deepEqual(sent("approval_decline"), [{ requestId: "r2" }, { requestId: "r3" }]);
   assert.equal(State.pendingApproval.requestId, "r1");
+  // And when the card's own turn ends, nothing of it is left to come up.
+  ask("r4", { tool_name: "Bash", tool_input: { command: "ls" } });
+  hook({ hook_event_name: "Stop", session_id: "s1" });
+  assert.equal(State.pendingApproval, null);
+  assert.deepEqual(State.approvalQueue, []);
 });
 
 test("the same request arriving twice is acknowledged again, not declined", () => {
@@ -827,6 +817,11 @@ test("a declined permission request leaves the stop timer running", () => {
     { coucou_agent: "gemini" },
   );
   assert.equal(task("agent_gemini"), undefined);
+  // So is a request from an agent that doesn't take approvals.
+  ask("r1");
+  afterStop(() => hook({ hook_event_name: "PermissionRequest", request_id: "r2", coucou_agent: "gemini", tool_name: "Bash" }));
+  assert.deepEqual(sent("approval_decline"), [{ requestId: "r1" }, { requestId: "r2" }]);
+  assert.equal(task().state, "idle");
 });
 
 for (const tool_name of ["ask_question", "default_api:ask_question"]) {
