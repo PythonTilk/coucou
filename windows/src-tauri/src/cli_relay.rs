@@ -494,11 +494,13 @@ pub async fn send(
     };
     let turn = chat.begin(&format!("subscription:{provider}"));
     let reads_file = turn.first && matches!(context, Some(ChatContext::File { .. }));
-    let system = chat::system_prompt(!reads_file);
+    // Local to this build: no web either once mail is in the conversation (chat.rs).
+    let web = !reads_file && chat.web_allowed();
+    let system = chat::system_prompt(web);
     let text = if cli == Cli::Claude {
         // Reading a dropped file, Claude Code reads it itself and gets no web at all.
         let inbox = crate::files::inbox_dir();
-        let tools: &[&str] = if reads_file { &["Read"] } else { &["WebSearch", "WebFetch"] };
+        let tools: &[&str] = if reads_file { &["Read"] } else if web { &["WebSearch", "WebFetch"] } else { &[] };
         let prompt = claude_code::chat_prompt(&turn.history, turn.first, context.as_ref(), &query);
         claude_code::ask(&claude_code::Request {
             model,
@@ -511,13 +513,13 @@ pub async fn send(
         .await?
     } else {
         let prompt = chat_prompt(&turn.history, turn.first, context.as_ref(), &query);
-        let policy = (cli == Cli::Gemini && reads_file).then(|| {
+        let policy = (cli == Cli::Gemini && !web).then(|| {
             let path = settings::local_dir().join("relay").join("gemini-no-web.toml");
             let _ = std::fs::create_dir_all(settings::local_dir().join("relay"));
             let _ = std::fs::write(&path, NO_WEB_POLICY);
             path
         });
-        let request = Request { model: None, system: &system, prompt: &prompt, web: !reads_file, no_web_policy: policy.as_deref() };
+        let request = Request { model: None, system: &system, prompt: &prompt, web, no_web_policy: policy.as_deref() };
         ask(cli, &exe, &request).await?
     };
     // The record keeps the file's name, never its contents: later turns search the web.

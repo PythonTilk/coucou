@@ -59,6 +59,11 @@ struct Conversation {
     native: Vec<Value>,
     /// `{"role", "content": text}` turns, the same whoever answered.
     plain: Vec<Value>,
+    /// Local to this build: mail went into this conversation (the Mail switch).
+    /// Its messages are untrusted text, so no turn of it gets the web: a message
+    /// written to steer the model could otherwise send the others to a website.
+    /// Cleared by "New chat", like the rest.
+    saw_mail: bool,
 }
 
 /// What a provider needs to build one turn.
@@ -76,6 +81,16 @@ impl Chat {
         let mut c = self.inner.lock().unwrap();
         let epoch = c.epoch + 1;
         *c = Conversation { epoch, ..Default::default() };
+    }
+
+    /// Mail is about to go into this conversation (lib.rs chat_send).
+    pub fn mark_mail(&self) {
+        self.inner.lock().unwrap().saw_mail = true;
+    }
+
+    /// Whether this turn may use the web: never once mail is in the conversation.
+    pub fn web_allowed(&self) -> bool {
+        !self.inner.lock().unwrap().saw_mail && !crate::mail::MAIL_TURN.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Starts a turn with `provider`, converting the history if another
@@ -399,5 +414,15 @@ mod tests {
             assert!(!is_inside(&inbox, &inbox.join("link.txt")));
         }
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_conversation_with_mail_in_it_gets_no_web_until_new_chat() {
+        let chat = Chat::default();
+        assert!(chat.web_allowed());
+        chat.mark_mail();
+        assert!(!chat.web_allowed());
+        chat.reset();
+        assert!(chat.web_allowed());
     }
 }

@@ -102,17 +102,24 @@ fn user_content(first: bool, context: Option<&ChatContext>, query: &str) -> Vec<
     content
 }
 
-fn request_body(model: &str, system: &str, history: &[Value], user: &Value) -> Value {
+fn request_body(model: &str, system: &str, history: &[Value], user: &Value, web: bool) -> Value {
     let mut messages = history.to_vec();
     messages.push(user.clone());
-    json!({
+    let mut body = json!({
         "model": model,
         "max_tokens": MAX_TOKENS,
         "system": system,
         "tools": [{ "type": "web_search_20260209", "name": "web_search", "max_uses": 5 }],
         "fallbacks": "default",
         "messages": messages,
-    })
+    });
+    // Local to this build: no web once mail is in the conversation (chat.rs).
+    if !web {
+        if let Some(o) = body.as_object_mut() {
+            o.remove("tools");
+        }
+    }
+    body
 }
 
 /// The assistant's full text from a Messages API content array — the same as
@@ -166,7 +173,8 @@ pub async fn send(
 
     let turn = chat.begin(chat::ANTHROPIC);
     let user = json!({ "role": "user", "content": user_content(turn.first, context.as_ref(), &query) });
-    let body = request_body(model, &chat::system_prompt(true), &turn.history, &user);
+    let web = chat.web_allowed();
+    let body = request_body(model, &chat::system_prompt(web), &turn.history, &user, web);
 
     let response = call(&endpoint, &key, &body).await?;
     let (blocks, text) = interpret(&response)?;
@@ -463,7 +471,7 @@ mod tests {
     fn the_request_carries_history_web_search_and_the_new_turn_last() {
         let history = vec![json!({"role":"user","content":"a"}), json!({"role":"assistant","content":"b"})];
         let user = json!({"role":"user","content":[{"type":"text","text":"c"}]});
-        let body = request_body("claude-x", "sys", &history, &user);
+        let body = request_body("claude-x", "sys", &history, &user, true);
         assert_eq!(body["model"], "claude-x");
         assert_eq!(body["system"], "sys");
         assert_eq!(body["max_tokens"], MAX_TOKENS);

@@ -549,6 +549,8 @@ async fn chat_send(
     // The chat's Mail switch: the latest Outlook messages ride under the request, and the
     // system prompt says how to write a plan (mail/plan.rs) that runs only after a click.
     if mail == Some(true) {
+        // Local to this build: from now on this conversation gets no web (chat.rs).
+        chat.mark_mail();
         let query = mail::decorate(&query).await;
         mail::MAIL_TURN.store(true, std::sync::atomic::Ordering::Relaxed);
         let reply = chat::send(&app, &chat, &settings, query, context).await;
